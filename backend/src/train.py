@@ -4,7 +4,26 @@ from data import train_loader, test_loader
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix, roc_auc_score
 import numpy as np
 
-def train():
+def train() -> None:
+    """
+    Train and fine-tune the model for the configured number of epochs.
+
+    The function first attempts to restore a previously saved checkpoint and
+    then performs the complete training loop. For each epoch, the model
+    processes all training batches, calculates the loss, performs
+    backpropagation, and updates its parameters using the configured optimizer.
+
+    After each epoch, the learning-rate scheduler is advanced, validation loss
+    is calculated, and a comprehensive evaluation is performed. The user is
+    also given the option to save the current training state as a checkpoint.
+
+    The total number of training epochs is determined by the combined warmup
+    and main training phases.
+
+    Returns:
+        None
+    """
+
     print(f"Initializing Training Session... ")
 
     load()
@@ -43,7 +62,21 @@ def train():
 
         print(f"============================================================")
 
-def validate():
+def validate() -> float:
+    """
+    Calculate the average validation loss over the evaluation dataset.
+
+    The model is temporarily switched to evaluation mode and gradient
+    computation is disabled to reduce unnecessary memory usage and
+    computational overhead. The loss is calculated for every batch in the
+    test loader and averaged across the entire dataset.
+
+    The model is returned to training mode before the function completes.
+
+    Returns:
+        float: The average cross-entropy loss across all validation batches.
+    """
+
     model.eval()
 
     validation_loss = 0
@@ -63,33 +96,33 @@ def validate():
 
     return validation_loss
 
-def save():
-    print("Saving Model...")
+def evaluate() -> None:
+    """
+    Evaluate the model using comprehensive multi-class classification metrics.
 
-    checkpoint = {
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-    }
+    The model is evaluated on the test dataset with gradient computation
+    disabled. During evaluation, the function collects predicted classes,
+    true labels, and predicted class probabilities for all samples.
 
-    torch.save(checkpoint, path)
+    The following metrics are calculated and printed:
 
-def load():
-    if path.exists():
-        print(f"Found checkpoint at {path}, Loading model...")
+    - Average test loss
+    - Classification accuracy
+    - Macro-averaged precision
+    - Macro-averaged recall
+    - Macro-averaged F1-score
+    - Multi-class AUC-ROC using the One-vs-Rest strategy
+    - Per-class precision, recall, F1-score, and sample support
+    - Confusion matrix
 
-        data = torch.load(path, map_location=device)
+    Macro averaging gives equal importance to each class regardless of the
+    number of samples in that class.
 
-        model.load_state_dict(data['model_state_dict'])
-        optimizer.load_state_dict(data['optimizer_state_dict'])
-        scheduler.load_state_dict(data['scheduler_state_dict'])
+    After evaluation, the model is returned to training mode.
 
-    else:
-        print(f"No checkpoint found at {path}, Initializing Default Values")
-
-    print(f"============================================================")
-
-def evaluate():
+    Returns:
+        None
+    """
 
     model.eval()
 
@@ -158,6 +191,56 @@ def evaluate():
 
     model.train()
 
+def save() -> None:
+    """
+    Save the current training state as a checkpoint.
+
+    The checkpoint includes the model parameters, optimizer state, and
+    learning-rate scheduler state. Saving these components together allows
+    training to be resumed from the same state at a later time.
+
+    Returns:
+        None
+    """
+
+    print("Saving Model...")
+
+    checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+    }
+
+    torch.save(checkpoint, path)
+
+def load() -> None:
+    """
+    Load a previously saved training checkpoint if one exists.
+
+    The function checks whether the configured checkpoint path exists. If a
+    checkpoint is found, it restores the model parameters, optimizer state,
+    and learning-rate scheduler state. If no checkpoint is available, the
+    current model and training configuration remain unchanged.
+
+    The checkpoint is loaded onto the configured computation device.
+
+    Returns:
+        None
+    """
+
+    if path.exists():
+        print(f"Found checkpoint at {path}, Loading model...")
+
+        data = torch.load(path, map_location=device)
+
+        model.load_state_dict(data['model_state_dict'])
+        optimizer.load_state_dict(data['optimizer_state_dict'])
+        scheduler.load_state_dict(data['scheduler_state_dict'])
+
+    else:
+        print(f"No checkpoint found at {path}, Initializing Default Values")
+
+    print(f"============================================================")
+
 if __name__ == "__main__":
-    evaluate()
     train()
