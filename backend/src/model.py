@@ -40,7 +40,7 @@ criterion = nn.CrossEntropyLoss()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-path = Path("../results/Model.pth")
+path = Path("../../results/Model.pth")
 
 if __name__ == "__main__":
     ...
