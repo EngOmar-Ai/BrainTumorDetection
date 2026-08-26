@@ -1,6 +1,6 @@
 from torchvision.models import resnet50, ResNet50_Weights
 
-from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR, StepLR
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
 from torch.optim import AdamW
 
 from torch import nn
