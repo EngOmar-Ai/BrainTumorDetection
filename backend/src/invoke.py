@@ -58,7 +58,7 @@ def invoke(tensor: Tensor):
     classes = ['glioma', 'meningioma', 'healthy', 'pituitary']
     probability = probabilities[0].tolist()
 
-    return {'class': classes[index], 'confidence': confidence * 100, 'probabilities': {classes[i]: round(probability[i],5) for i in range(len(classes))}}
+    return {'class': classes[index], 'confidence': confidence, 'probabilities': {classes[i]: round(probability[i],5) for i in range(len(classes))}}
 
 if __name__ == "__main__":
     ...
