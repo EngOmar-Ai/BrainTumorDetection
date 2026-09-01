@@ -1,4 +1,20 @@
-from typing import List
+from google import genai
 
-def invoke(prompt: str | List[str]) -> str:
-    return ""
+client = genai.Client()
+
+def invoke(prompt: str | list) -> str:
+
+    try:
+
+        response = client.models.generate_content(
+            model = "gemini-3.6-flash",
+            contents= prompt,
+        ).text
+
+        assert response is not None
+
+        return response
+
+    except Exception as error:
+        raise error
+

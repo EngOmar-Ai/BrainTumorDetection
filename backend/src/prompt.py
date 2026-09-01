@@ -1,2 +1,2 @@
-def initialization_prompt(data) -> str:
+def initiation_prompt(data) -> str:
     return ""

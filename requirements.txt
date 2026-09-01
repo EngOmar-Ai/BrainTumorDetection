@@ -8,3 +8,5 @@ fastapi
 uvicorn
 pillow
 redis
+google-genai
+protobuf

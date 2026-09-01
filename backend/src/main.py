@@ -1,5 +1,4 @@
-from typing import List
-
+import json
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from PIL import Image
 from io import BytesIO
@@ -10,65 +9,105 @@ from train import load
 import redis
 import uuid
 import gemini
-from prompt import initialization_prompt
+from prompt import initiation_prompt
+from pydantic import BaseModel
 
-app = FastAPI()
+load()
 
 server = redis.Redis(host="localhost", port=6379, decode_responses=True)
+app = FastAPI()
 
-@app.post("/process")
+class MessageRequest(BaseModel):
+    session_id: str
+    message: str
+
+@app.post("/sessions/initiate")
 async def initiate(file: UploadFile = File(...)):
 
     bytes_data = await file.read()
 
     try:
-
         verification = Image.open(BytesIO(bytes_data))
         verification.verify()
+    except Exception:
+        raise HTTPException(status_code=400, detail="File Failed To Verify As An Image")
 
-        # ---------------------------------------------------------------------------------------------- #
-        # -- Missing: Verify Image Is An Image Of An MRI Scan And That The Image Is Clear And Visible -- #
-        # ---------------------------------------------------------------------------------------------- #
+    # ---------------------------------------------------------------------------------------------- #
+    # -- Missing: Verify Image Is An Image Of An MRI Scan And That The Image Is Clear And Visible -- #
+    # ---------------------------------------------------------------------------------------------- #
 
-        image = Image.open(BytesIO(bytes_data)).convert("RGB")
+    image = Image.open(BytesIO(bytes_data)).convert("RGB")
 
-        load()
-
-        transform = transforms.Compose([
+    transform = transforms.Compose([
             transforms.Resize((224, 224), interpolation=InterpolationMode.LANCZOS),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-        image = transform(image).unsqueeze(0)
+    image = transform(image).unsqueeze(0)
 
-        classification = invoke(image)
+    classification = invoke(image)
 
-        unique_id = str(uuid.uuid4())
-        key = f"Conversation:{unique_id}"
+    unique_id = str(uuid.uuid4())
+    session_key = f"Conversation:{unique_id}"
 
-        prompt = initialization_prompt(classification)
-        response = gemini.invoke(prompt)
+    prompt = initiation_prompt(classification)
+    user = {
+        "role": "user",
+        "parts": [
+            {"text": prompt}
+        ]
+    }
 
-        server.rpush(key,prompt, response)
-        server.expire(key, 1800)
+    server.rpush(session_key, json.dumps(user))
 
-        return {"id": unique_id, "response": response}
+    response = gemini.invoke([user])
+    assistant = {
+        "role": "model",
+        "parts": [
+            {"text": response}
+        ]
+    }
 
-    except Exception:
-                raise HTTPException(status_code=400, detail="File Failed To Verify As An Image")
+    server.rpush(session_key, json.dumps(assistant))
 
-@app.post("/chat")
-async def chat(session_id: str, user: str):
+    server.expire(session_key, 1800)
 
-    key = f"Conversation:{session_id}"
+    return {"id": unique_id, "response": response}
 
-    server.rpush(key, f"User: {user}")
+@app.post("/sessions/message")
+async def message(payload: MessageRequest):
 
-    history = server.lrange(key, 0, -1)
-    response = gemini.invoke(history) #type: ignore
+    session_key = f"Conversation:{payload.session_id}"
 
-    server.rpush(key, f"AI: {response}")
-    server.expire(key, 1800)
+    if server.exists(session_key):
 
-    return {"response": response}
+        user = {
+            "role": "user",
+            "parts": [
+                {"text": payload.message}
+            ]
+        }
+
+        server.rpush(session_key, json.dumps(user))
+
+        history = server.lrange(session_key, 0, -1)
+        history = [json.loads(turn) for turn in history]
+
+        response = gemini.invoke(history)
+
+        assistant = {
+            "role": "model",
+            "parts": [
+                {"text": response}
+            ]
+        }
+
+        server.rpush(session_key, json.dumps(assistant))
+
+        server.expire(session_key, 1800)
+
+        return {"session_active": True,"response": response}
+
+    else:
+        return {"session_active": False, "response": "Session Expired"}
