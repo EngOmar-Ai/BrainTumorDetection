@@ -55,7 +55,7 @@ def invoke(tensor: Tensor):
         confidence, index = torch.max(probabilities, dim=1)
         confidence, index = confidence.item(), index.item()
 
-    classes = ['glioma', 'meningioma', 'no tumor', 'pituitary tumor']
+    classes = ['glioma', 'meningioma', 'healthy', 'pituitary']
     probability = probabilities[0].tolist()
 
     return {'class': classes[index], 'confidence': confidence * 100, 'probabilities': {classes[i]: round(probability[i],5) for i in range(len(classes))}}
