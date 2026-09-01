@@ -62,4 +62,3 @@ def invoke(tensor: Tensor):
 
 if __name__ == "__main__":
     ...
-
