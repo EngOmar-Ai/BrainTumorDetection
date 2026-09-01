@@ -7,3 +7,4 @@ python-multipart
 fastapi
 uvicorn
 pillow
+redis
