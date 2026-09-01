@@ -2,3 +2,8 @@ torchvision
 torch
 numpy
 scikit-learn
+pydantic
+python-multipart
+fastapi
+uvicorn
+pillow
