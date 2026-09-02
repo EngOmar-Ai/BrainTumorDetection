@@ -146,7 +146,8 @@ async def message(payload: MessageRequest):
     return {"response": response}
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler():
+async def unhandled_exception_handler(request, exc):
+    print(f"Request:{request.url.path}\nUnhandled Exception: {exc}")
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 if __name__ == "__main__":
