@@ -10,3 +10,4 @@ pillow
 redis
 google-genai
 protobuf
+python-dotenv

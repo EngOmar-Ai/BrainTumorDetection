@@ -8,14 +8,15 @@ async function uploadFile() {
     const formData = new FormData();
     formData.append("file", blob, "dummy.jpeg")
 
-    const result = await fetch("http://localhost:8000/process", {
+    const result = await fetch("http://localhost:8000/sessions/initiate", {
         method: "POST",
         body: formData
     });
 
     const data = await result.json();
 
-    console.log(data)
+    console.log(data.id)
+    console.log(data.response)
 }
 
 uploadFile();
