@@ -1,4 +1,4 @@
-def initiation_prompt(data) -> str:
+def initiation_prompt(data: dict) -> str:
     return f"""
 # Brain Tumor Detector — AI Explanation Assistant System Prompt
 
@@ -396,12 +396,16 @@ The project should be presented as an example of applying deep learning to medic
 
 **A machine-learning prediction is not automatically a medical diagnosis.**
 
-----
+-----
 
-Here Is The Results Provided By The Model:
+Here is the results provided by the model for this user request, Make sure to
+follow the instructions above in your response
 
 Class: {data['class']}
 Confidence: {data['confidence']}
 Probabilities: {data['probabilities']}
 
 """
+
+if __name__ == "__main__":
+    ...

@@ -1,21 +1,31 @@
-import json
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from PIL import Image
-from io import BytesIO
-from invoke import invoke
-from torchvision import transforms
-from torchvision.transforms import InterpolationMode
-from train import load
-import redis
-import uuid
-import gemini
-from prompt import initiation_prompt
+from fastapi.responses import JSONResponse
+
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
+from io import BytesIO
+
+from torchvision.transforms import InterpolationMode
+from torchvision import transforms
+
+from prompt import initiation_prompt
+from train import load
+from invoke import invoke
+import gemini
+
+import redis
+import json
+import uuid
+
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_MESSAGE_LENGTH = 4000
+SESSION_TTL_SECONDS = 1800
+ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg"}
+
+server = redis.Redis(host="localhost", port=6379)
+app = FastAPI()
 
 load()
-
-server = redis.Redis(host="localhost", port=6379, decode_responses=True)
-app = FastAPI()
 
 class MessageRequest(BaseModel):
     session_id: str
@@ -24,13 +34,19 @@ class MessageRequest(BaseModel):
 @app.post("/sessions/initiate")
 async def initiate(file: UploadFile = File(...)):
 
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported file type; upload a PNG,JPEG or JPG image")
+
     bytes_data = await file.read()
+
+    if len(bytes_data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeded maximum allowed size of 8 megabytes")
 
     try:
         verification = Image.open(BytesIO(bytes_data))
         verification.verify()
-    except Exception:
-        raise HTTPException(status_code=400, detail="File Failed To Verify As An Image")
+    except UnidentifiedImageError:
+        raise HTTPException(status_code=400, detail="File failed to verify as an image")
 
     # ---------------------------------------------------------------------------------------------- #
     # -- Missing: Verify Image Is An Image Of An MRI Scan And That The Image Is Clear And Visible -- #
@@ -39,10 +55,10 @@ async def initiate(file: UploadFile = File(...)):
     image = Image.open(BytesIO(bytes_data)).convert("RGB")
 
     transform = transforms.Compose([
-            transforms.Resize((224, 224), interpolation=InterpolationMode.LANCZOS),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+        transforms.Resize((224, 224), interpolation=InterpolationMode.LANCZOS),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
     image = transform(image).unsqueeze(0)
 
@@ -59,9 +75,11 @@ async def initiate(file: UploadFile = File(...)):
         ]
     }
 
-    server.rpush(session_key, json.dumps(user))
+    try:
+        response = gemini.invoke([user])
+    except gemini.GeminiInvocationError as error:
+        raise HTTPException(status_code=502, detail=str(error))
 
-    response = gemini.invoke([user])
     assistant = {
         "role": "model",
         "parts": [
@@ -69,45 +87,67 @@ async def initiate(file: UploadFile = File(...)):
         ]
     }
 
-    server.rpush(session_key, json.dumps(assistant))
+    pipe = server.pipeline()
 
-    server.expire(session_key, 1800)
+    pipe.rpush(session_key, json.dumps(user))
+    pipe.rpush(session_key, json.dumps(assistant))
+    pipe.expire(session_key, SESSION_TTL_SECONDS)
+
+    pipe.execute()
 
     return {"id": unique_id, "response": response}
 
 @app.post("/sessions/message")
 async def message(payload: MessageRequest):
 
-    session_key = f"Conversation:{payload.session_id}"
+    try:
+        session_key = f"Conversation:{uuid.UUID(payload.session_id)}"
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid session_id")
 
-    if server.exists(session_key):
+    if not server.exists(session_key):
+        return {"session_active": False, "response": "Session Not Found"}
 
-        user = {
-            "role": "user",
-            "parts": [
-                {"text": payload.message}
-            ]
-        }
+    if len(payload.message) > MAX_MESSAGE_LENGTH:
+        raise HTTPException(status_code=400, detail="Message Exceeded Maximum Allowed Length")
 
-        server.rpush(session_key, json.dumps(user))
+    user = {
+        "role": "user",
+        "parts": [
+            {"text": payload.message}
+        ]
+    }
 
-        history = server.lrange(session_key, 0, -1)
-        history = [json.loads(turn) for turn in history]
 
+    server.rpush(session_key, json.dumps(user))
+
+    history = server.lrange(session_key, 0, -1)
+    history = [json.loads(turn) for turn in history]
+
+    try:
         response = gemini.invoke(history)
+    except gemini.GeminiInvocationError as error:
+        raise HTTPException(status_code=502, detail=str(error))
 
-        assistant = {
-            "role": "model",
-            "parts": [
-                {"text": response}
-            ]
-        }
+    assistant = {
+        "role": "model",
+        "parts": [
+            {"text": response}
+        ]
+    }
 
-        server.rpush(session_key, json.dumps(assistant))
+    pipe = server.pipeline()
 
-        server.expire(session_key, 1800)
+    pipe.rpush(session_key, json.dumps(assistant))
+    pipe.expire(session_key, SESSION_TTL_SECONDS)
 
-        return {"session_active": True,"response": response}
+    pipe.execute()
 
-    else:
-        return {"session_active": False, "response": "Session Expired"}
+    return {"session_active": True, "response": response}
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler():
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+if __name__ == "__main__":
+    ...
