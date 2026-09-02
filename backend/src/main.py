@@ -103,13 +103,13 @@ async def message(payload: MessageRequest):
     try:
         session_key = f"Conversation:{uuid.UUID(payload.session_id)}"
     except (ValueError, AttributeError, TypeError):
-        raise HTTPException(status_code=400, detail="Invalid session_id")
+        raise HTTPException(status_code=400, detail="Invalid Session Id")
 
     if not server.exists(session_key):
-        return {"session_active": False, "response": "Session Not Found"}
+        raise HTTPException(status_code=400, detail="Session Not Found")
 
     if len(payload.message) > MAX_MESSAGE_LENGTH:
-        raise HTTPException(status_code=400, detail="Message Exceeded Maximum Allowed Length")
+        raise HTTPException(status_code=413, detail="Message Exceeded Maximum Allowed Length")
 
     user = {
         "role": "user",
@@ -143,7 +143,7 @@ async def message(payload: MessageRequest):
 
     pipe.execute()
 
-    return {"session_active": True, "response": response}
+    return {"response": response}
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler():
