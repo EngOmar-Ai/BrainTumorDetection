@@ -21,17 +21,19 @@ class GeminiInvocationError(Exception):
 
 client = genai.Client()
 
-def invoke(prompt: str | list) -> str:
+async def invoke(prompt: str | list) -> str:
 
     try:
 
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model = "gemini-3.6-flash",
             contents= prompt,
-        ).text
+        )
+
+        response = response.text
 
         if not response:
-            raise GeminiInvocationError("The Model Returned An Invalid String")
+            raise GeminiInvocationError("The Model Returned An Empty String")
 
         return response
 
