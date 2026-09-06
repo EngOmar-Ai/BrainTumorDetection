@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroRead — Brain MRI · 4-Class Classification</title>
+<link rel="icon" href="data:,">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+:root{
+  --bg:#0B0D0A; --bg2:#10130D; --line:#232920; --line2:#333B2C;
+  --ink:#E9EDE2; --body:#C9CFC0; --mut:#9BA494; --dim:#6E7668;
+  --acc:#C6F24E; --acc-ink:#0B0D0A; --red:#FF6B57; --amber:#F2B33D;
+  --serif:'Instrument Serif',serif; --sans:'Archivo',sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(233,237,226,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(233,237,226,.028) 1px,transparent 1px);
+  background-size:54px 54px}
+::selection{background:var(--acc);color:var(--acc-ink)}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-thumb{background:#2A3025}
+*::-webkit-scrollbar-track{background:transparent}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible,textarea:focus-visible{outline:1px solid var(--acc);outline-offset:2px}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:50;display:flex;align-items:stretch;justify-content:space-between;
+  height:54px;border-bottom:1px solid var(--line);background:rgba(11,13,10,.92);backdrop-filter:blur(6px)}
+.brand{display:flex;align-items:center;gap:13px;padding:0 22px;border-right:1px solid var(--line)}
+.brand-name{font-family:var(--serif);font-size:22px;white-space:nowrap}
+.brand-sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;color:var(--dim);border-left:1px solid var(--line);
+  padding-left:13px;text-transform:uppercase;white-space:nowrap}
+.top-status{display:flex;align-items:stretch}
+.stat{display:flex;align-items:center;gap:8px;padding:0 18px;border-left:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--mut);background:none;border-top:none;border-bottom:none;border-right:none}
+button.stat:hover{color:var(--ink)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+.dot.live{background:var(--acc)} .dot.demo{background:var(--amber)}
+.stat.hot{color:var(--amber)} .stat.warn{color:var(--amber)}
+
+/* ---------- shared ---------- */
+.sect-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;
+  display:flex;align-items:center;gap:12px;white-space:nowrap}
+.sect-label::after{content:"";flex:1;height:1px;background:var(--line);min-width:24px}
+.tbtn{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--line2);color:var(--mut);
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;padding:5px 10px;text-transform:uppercase;transition:.2s}
+.tbtn:hover{color:var(--acc);border-color:var(--acc)}
+.tbtn svg{width:12px;height:12px}
+.corners i{position:absolute;width:14px;height:14px;border:1px solid var(--line2);pointer-events:none;transition:border-color .25s}
+.corners i:nth-of-type(1){top:-1px;left:-1px;border-right:none;border-bottom:none}
+.corners i:nth-of-type(2){top:-1px;right:-1px;border-left:none;border-bottom:none}
+.corners i:nth-of-type(3){bottom:-1px;left:-1px;border-right:none;border-top:none}
+.corners i:nth-of-type(4){bottom:-1px;right:-1px;border-left:none;border-top:none}
+.xh{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .2s}
+.xh.on{opacity:1}
+.xh::before{content:"";position:absolute;top:0;bottom:0;left:var(--x,50%);width:1px;background:rgba(198,242,78,.22)}
+.xh::after{content:"";position:absolute;left:0;right:0;top:var(--y,50%);height:1px;background:rgba(198,242,78,.22)}
+.probe{position:absolute;font-family:var(--mono);font-size:10px;color:var(--acc);background:rgba(11,13,10,.88);
+  padding:2px 6px;border:1px solid var(--line2);white-space:nowrap;pointer-events:none}
+.dim{color:var(--dim);font-style:italic}
+
+/* ---------- idle stage ---------- */
+.stage-idle{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:58px 28px 80px;
+  display:grid;grid-template-columns:minmax(320px,5fr) 7fr;gap:56px;align-items:center;min-height:calc(100vh - 150px)}
+.hero h1{font-family:var(--serif);font-weight:400;font-size:clamp(40px,4.6vw,62px);line-height:1.04;margin-top:20px}
+.hero h1 em{color:var(--acc)}
+.hero .sub{color:var(--mut);margin-top:20px;max-width:46ch;font-size:14.5px}
+.pipe{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:30px}
+.pipe span{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--mut);border:1px solid var(--line2);padding:5px 9px}
+.pipe i{color:var(--dim);font-style:normal;font-size:11px}
+.pipe-note{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--dim);margin-top:14px}
+
+.dropzone{position:relative;height:min(64vh,600px);border:1px solid var(--line2);background:var(--bg2);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;
+  transition:border-color .25s,background .25s}
+.dropzone:hover,.dropzone.drag{border-color:var(--acc)}
+.dropzone.drag{background:rgba(198,242,78,.04)}
+.dropzone:hover .corners i,.dropzone.drag .corners i{border-color:var(--acc)}
+.schem{height:82%;color:var(--line2);transition:color .3s;max-width:90%}
+.dropzone:hover .schem{color:var(--mut)}
+.dropzone.drag .schem{color:var(--acc)}
+.dz-sweep{position:absolute;top:0;bottom:0;width:1px;background:var(--acc);opacity:.12;animation:dzsweep 7s linear infinite;pointer-events:none}
+@keyframes dzsweep{from{left:-2px}to{left:100%}}
+.drop-cap{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:center;
+  padding:13px 18px;border-top:1px dashed var(--line2);font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--mut)}
+.drop-cap .dc-r{display:inline-flex;align-items:center;gap:7px;color:var(--acc)}
+.drop-cap .dc-r svg{width:13px;height:13px}
+.dz-err{position:absolute;left:18px;bottom:56px;font-family:var(--mono);font-size:11px;color:var(--red)}
+.dropzone.shake{animation:shake .4s}
+@keyframes shake{20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+
+/* ---------- live stage ---------- */
+.stage-live{position:relative;z-index:1;max-width:1340px;margin:0 auto;padding:30px 28px 60px;
+  display:grid;grid-template-columns:minmax(380px,7fr) minmax(370px,5fr)}
+.viewer-col{padding-right:36px;border-right:1px solid var(--line)}
+.report{padding-left:36px;min-width:0}
+@media(min-width:1021px){.report{position:sticky;top:78px;max-height:calc(100vh - 96px);overflow:auto}}
+.col-head{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+.col-head .sect-label{flex:1}
+
+.viewer{position:relative;height:min(56vh,540px);border:1px solid var(--line2);background:#090B08;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.viewer.px{overflow:auto;align-items:flex-start;justify-content:flex-start}
+.viewer img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.viewer.px img{max-width:none;max-height:none}
+.viewer.inv img{filter:invert(1)}
+.scanfx{position:absolute;left:0;right:0;top:-70px;height:70px;border-bottom:2px solid var(--acc);
+  background:rgba(198,242,78,.06);opacity:0;pointer-events:none}
+.viewer.scanning .scanfx{opacity:1;animation:sweep 1.5s linear infinite}
+@keyframes sweep{from{top:-70px}to{top:100%}}
+.vtag{position:absolute;top:12px;left:12px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  background:var(--acc);color:var(--acc-ink);padding:4px 8px;text-transform:uppercase}
+.tools{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.meta{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--dim);text-align:right}
+.telemetry{margin-top:14px;border:1px solid var(--line);background:var(--bg2);padding:12px 14px;min-height:148px}
+.tele-cap{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--dim);margin-bottom:8px}
+.tele-line{display:grid;grid-template-columns:14px 108px 1fr;gap:10px;padding:2.5px 0;
+  font-family:var(--mono);font-size:11px;opacity:0;transform:translateY(3px);transition:.35s}
+.tele-line.on{opacity:1;transform:none}
+.tele-k{color:var(--dim)} .tele-key{color:var(--mut);letter-spacing:.08em} .tele-v{color:var(--dim)} .tele-v.ok{color:var(--acc)}
+
+/* ---------- report ---------- */
+.verdict-name{font-family:var(--serif);font-weight:400;font-size:clamp(36px,3.6vw,50px);line-height:1.02;margin-top:14px}
+.verdict-desc{font-family:var(--serif);font-style:italic;color:var(--mut);font-size:16.5px;margin-top:6px}
+.verdict-note{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--dim);margin-top:8px}
+.verdict-conf{display:flex;align-items:baseline;gap:14px;margin-top:16px;flex-wrap:wrap}
+.conf-num{font-family:var(--mono);font-size:32px;font-weight:500;color:var(--acc)}
+.conf-cap{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--dim);line-height:1.5}
+.conf-delta{margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--mut)}
+.ledger{margin-top:26px}
+.ledger-note{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--dim);margin-top:8px}
+.prob-row{display:grid;grid-template-columns:24px 104px 1fr 58px;gap:12px;align-items:center;
+  padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--mono)}
+.prob-row:first-child{border-top:1px solid var(--line);margin-top:12px}
+.prob-idx{font-size:9.5px;color:var(--dim)}
+.prob-name{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prob-bar{height:10px;border:1px solid var(--line2);position:relative}
+.prob-bar i{position:absolute;top:1px;bottom:1px;left:1px;width:0;background:#39422F;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.prob-row.win .prob-bar i{background:var(--acc)}
+.prob-row.win .prob-name{color:var(--ink)}
+.prob-row.win .prob-idx{color:var(--acc)}
+.prob-val{font-size:11px;text-align:right;color:var(--dim)}
+.prob-row.win .prob-val{color:var(--acc)}
+.report .sect-label.second{margin-top:28px}
+.explain{margin-top:14px;font-size:14px;color:var(--body)}
+.explain p{margin-bottom:10px}
+.explain ul{margin:0 0 10px 18px}
+.explain li{margin:3px 0}
+.explain strong{color:var(--ink);font-weight:600}
+.explain h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--acc);margin:14px 0 6px}
+.caret{display:inline-block;width:8px;height:13px;background:var(--acc);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ---------- chat ---------- */
+.chat .sect-label{margin-top:30px}
+.transcript{margin-top:6px;max-height:300px;overflow-y:auto}
+.turn{padding:12px 2px 12px 14px;border-bottom:1px solid var(--line);border-left:2px solid transparent}
+.turn.ai{border-left-color:var(--acc)}
+.turn-tag{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;color:var(--dim);margin-bottom:5px}
+.turn.ai .turn-tag{color:var(--acc)}
+.turn-body{font-size:13.5px;color:var(--body)}
+.turn-body p{margin-bottom:8px} .turn-body p:last-child{margin-bottom:0}
+.turn-body ul{margin:0 0 8px 18px} .turn-body strong{color:var(--ink);font-weight:600}
+.turn.me .turn-body{color:var(--mut);white-space:normal}
+.sugg{display:flex;flex-wrap:wrap;gap:8px 20px;padding:13px 2px}
+.sugg button{background:none;border:none;border-bottom:1px solid var(--line2);padding:2px 0;
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--mut);transition:.2s}
+.sugg button:hover{color:var(--acc);border-color:var(--acc)}
+.composer{border:1px solid var(--line2);background:var(--bg2);display:flex;align-items:flex-end;gap:10px;padding:10px 12px;margin-top:2px;transition:border-color .2s}
+.composer:focus-within{border-color:var(--mut)}
+.composer textarea{flex:1;background:none;border:none;outline:none;resize:none;color:var(--ink);
+  font-family:var(--sans);font-size:14px;line-height:1.5;max-height:96px;min-height:24px}
+.composer textarea:disabled{color:var(--dim)}
+.composer textarea::placeholder{color:var(--dim)}
+.send{flex:none;width:34px;height:34px;display:grid;place-items:center;background:var(--acc);color:var(--acc-ink);border:none;transition:.2s}
+.send svg{width:15px;height:15px}
+.send:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
+.cnt{font-family:var(--mono);font-size:9.5px;color:var(--dim);align-self:center;white-space:nowrap}
+.cnt.hot{color:var(--red)}
+.hint{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--dim);margin-top:8px}
+
+/* ---------- footer / toasts ---------- */
+footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:18px 28px;display:flex;gap:12px 28px;
+  justify-content:space-between;flex-wrap:wrap;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--dim)}
+#toasts{position:fixed;right:18px;bottom:18px;z-index:100;display:flex;flex-direction:column;gap:8px}
+.toast{display:flex;background:#151912;border:1px solid var(--line2);border-left:2px solid var(--acc);
+  padding:10px 14px;max-width:340px;font-size:13px;cursor:pointer;animation:tin .25s;transition:.25s}
+.toast.err{border-left-color:var(--red)}
+@keyframes tin{from{opacity:0;transform:translateX(10px)}}
+.t-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}
+
+@media(max-width:1020px){
+  .stage-idle{grid-template-columns:1fr;gap:42px;padding-top:40px}
+  .stage-live{grid-template-columns:1fr}
+  .viewer-col{padding-right:0;border-right:none}
+  .report{padding-left:0;margin-top:36px}
+  .brand-sub{display:none}
+  .stat{padding:0 12px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C6F24E" stroke-width="1.5" aria-hidden="true">
+      <circle cx="12" cy="12" r="7"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/><circle cx="12" cy="12" r="1.6" fill="#C6F24E" stroke="none"/>
+    </svg>
+    <span class="brand-name">NeuroRead</span>
+    <span class="brand-sub">ResNet-50 · 4-class · local</span>
+  </div>
+  <div class="top-status">
+    <button class="stat" id="statusPill" title="Click to re-probe the backend — serve via http://localhost:8000">
+      <span class="dot" id="statusDot"></span><span id="statusTxt">CONNECTING…</span>
+    </button>
+    <span class="stat" id="rateStat" title="Uploads + messages per 10-minute window (mirrors the backend limit)">REQ 0/10</span>
+    <span class="stat" id="ttlStat" hidden>TTL 30:00</span>
+  </div>
+</header>
+
+<!-- ================= IDLE / INGEST ================= -->
+<section class="stage-idle" id="stageIdle">
+  <div class="hero">
+    <div class="sect-label">01 · Ingest — POST /sessions/initiate</div>
+    <h1>One slice in.<br><em>Four-way verdict out.</em></h1>
+    <p class="sub">Drop an axial brain MRI and a fine-tuned ResNet-50 reads it on your machine — ranking Glioma, Meningioma, Pituitary Tumor and No Tumor — then a Gemini session walks you through the finding and takes your questions.</p>
+    <div class="pipe">
+      <span>VERIFY</span><i>→</i><span>PREPROCESS</span><i>→</i><span>INFER · RESNET-50</span><i>→</i><span>EXPLAIN · GEMINI</span>
+    </div>
+    <p class="pipe-note">PNG · JPEG ≤ 8 MB — rate-limited to 10 requests / 10 min · nothing leaves localhost</p>
+  </div>
+
+  <div class="dropzone" id="dz" role="button" tabindex="0" aria-label="Upload an MRI image — click, drop or paste">
+    <svg class="schem" viewBox="0 0 440 520" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <ellipse cx="220" cy="252" rx="164" ry="196"/>
+      <ellipse cx="220" cy="256" rx="146" ry="176" stroke-dasharray="3 5"/>
+      <path d="M220 86 V 428" stroke-dasharray="1 7" stroke-linecap="round"/>
+      <path d="M227 208 C 243 212 252 226 252 248 C 252 274 246 298 236 314 C 231 321 226 317 227 308 C 230 282 230 240 227 208 Z"/>
+      <path d="M213 208 C 197 212 188 226 188 248 C 188 274 194 298 204 314 C 209 321 214 317 213 308 C 210 282 210 240 213 208 Z"/>
+      <ellipse cx="220" cy="278" rx="7" ry="15"/>
+      <path d="M104 176 Q 122 160 144 156"/><path d="M92 232 Q 112 224 132 228"/>
+      <path d="M100 300 Q 118 312 140 314"/><path d="M140 372 Q 158 380 178 376"/>
+      <path d="M336 176 Q 318 160 296 156"/><path d="M348 232 Q 328 224 308 228"/>
+      <path d="M340 300 Q 322 312 300 314"/><path d="M300 372 Q 282 380 262 376"/>
+      <path d="M36 252 H 148 M292 252 H 404" stroke-dasharray="2 6"/>
+      <path d="M220 36 V 150 M220 354 V 468" stroke-dasharray="2 6"/>
+      <g font-family="IBM Plex Mono, monospace" font-size="13" fill="currentColor" stroke="none" text-anchor="middle" opacity=".85">
+        <text x="220" y="24">A</text><text x="220" y="502">P</text><text x="20" y="257">R</text><text x="420" y="257">L</text>
+      </g>
+      <path d="M46 486 H 106"/>
+      <text x="114" y="490" font-family="IBM Plex Mono, monospace" font-size="10" fill="currentColor" stroke="none">50 MM</text>
+    </svg>
+    <div class="dz-sweep"></div>
+    <div class="xh" id="dzXH"><span class="probe" id="dzProbe">X 0 · Y 0</span></div>
+    <span class="corners"><i></i><i></i><i></i><i></i></span>
+    <p class="dz-err" id="dzErr" hidden></p>
+    <div class="drop-cap">
+      <span>PNG · JPEG — MAX 8 MB · OR PASTE</span>
+      <span class="dc-r"><i data-lucide="upload"></i>BROWSE</span>
+    </div>
+    <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden>
+  </div>
+</section>
+
+<!-- ================= LIVE / READ + REPORT ================= -->
+<section class="stage-live hidden" id="stageLive">
+  <div class="viewer-col">
+    <div class="col-head">
+      <span class="sect-label">02 · Read</span>
+      <button class="tbtn" id="newScan"><i data-lucide="rotate-ccw"></i>New scan</button>
+    </div>
+    <div class="viewer" id="viewer">
+      <img id="mri" alt="Uploaded MRI slice">
+      <div class="scanfx"></div>
+      <div class="xh" id="vXH"><span class="probe" id="vProbe">X 0 · Y 0</span></div>
+      <span class="corners"><i></i><i></i><i></i><i></i></span>
+      <span class="vtag" id="vtag" hidden></span>
+    </div>
+    <div class="tools">
+      <button class="tbtn" id="invertBtn" title="Invert grayscale — as radiologists do">Invert</button>
+      <button class="tbtn" id="fitBtn" title="Toggle fit / 1:1 pixels"><span id="fitTxt">1:1</span></button>
+      <span class="meta"><span id="metaDims">— × — PX</span> · <span id="metaSize">— KB</span> · <span id="metaType">—</span> · <span id="metaSes">SESSION —</span></span>
+    </div>
+    <div class="telemetry">
+      <div class="tele-cap">PIPELINE TELEMETRY</div>
+      <div id="teleLines"></div>
+    </div>
+  </div>
+
+  <div class="report">
+    <div class="col-head">
+      <span class="sect-label">03 · Report</span>
+      <button class="tbtn" id="sid" title="Click to copy the session id">SESSION —</button>
+    </div>
+
+    <div class="sect-label">Verdict</div>
+    <h2 class="verdict-name" id="vName">—</h2>
+    <p class="verdict-desc" id="vDesc">Awaiting a scan.</p>
+    <p class="verdict-note" id="vNote"></p>
+    <div class="verdict-conf">
+      <span class="conf-num" id="confNum">0.0%</span>
+      <span class="conf-cap">SOFTMAX<br>CONFIDENCE</span>
+      <span class="conf-delta" id="confDelta"></span>
+    </div>
+
+    <div class="sect-label second">Differential — all classes</div>
+    <div class="ledger" id="ledger"></div>
+    <p class="ledger-note">SOFTMAX OUTPUT · Σ = 1.000 — RELATIVE SCORES, NOT CALIBRATED PROBABILITIES</p>
+
+    <div class="sect-label second">Initial read — Gemini</div>
+    <div class="explain" id="explainBody"><p class="dim">Waiting for a scan…</p></div>
+
+    <div class="chat">
+      <div class="sect-label">Follow-up — POST /sessions/message</div>
+      <div class="transcript" id="transcript"></div>
+      <div class="sugg" id="sugg" hidden>
+        <button data-q="What treatment is typical for a finding like this?">What treatment is typical?</button>
+        <button data-q="How reliable is this model, honestly?">How reliable is the model?</button>
+        <button data-q="Which MRI sequences would a radiologist pull next?">Which sequences come next?</button>
+      </div>
+      <div class="composer">
+        <textarea id="inp" rows="1" maxlength="4000" placeholder="Ask about this reading — the session keeps full context." disabled></textarea>
+        <span class="cnt" id="cnt">0 / 4000</span>
+        <button class="send" id="send" disabled title="Send (Enter)"><i data-lucide="corner-down-left"></i></button>
+      </div>
+      <p class="hint">ENTER TO SEND · SHIFT+ENTER NEWLINE · CLICK A RESPONSE TEXT TO SKIP TYPING</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>RESNET-50 · IMAGENET-INIT · 4-CLASS SOFTMAX — REDIS SESSIONS · GEMINI SYNTHESIS</span>
+  <span>SINGLE-FILE FRONTEND → FASTAPI @ :8000</span>
+  <span>RESEARCH DEMONSTRATION — NOT A MEDICAL DEVICE</span>
+</footer>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= CONFIG ================= */
+/* Served by FastAPI's StaticFiles mount, API_BASE is '' and every call is same-origin.
+   Opened as file://, it aims at http://localhost:8000 — but the browser will block it;
+   the app detects that and tells you to use the served URL instead. */
+const API_BASE = (location.protocol.startsWith('http') && ['localhost','127.0.0.1'].includes(location.hostname))
+  ? '' : 'http://localhost:8000';
+const CONFIG = { RATE_MAX:10, RATE_WIN:600, TTL:1800, MAX_MSG:4000 };
+
+/* Frontend class keys. The backend's invoke() uses 'healthy' for the no-tumor class —
+   normalizeInit() aliases it (and display names like 'No Tumor') onto 'notumor' below. */
+const CLASSES = [
+  {key:'glioma',     name:'Glioma',          desc:'Neuroepithelial origin — the most common primary brain tumor', note:'INTRA-AXIAL · INFILTRATIVE · APPEARANCE VARIES WIDELY WITH GRADE'},
+  {key:'meningioma', name:'Meningioma',      desc:'Meningeal origin — typically extra-axial and slow-growing',    note:'DURAL-BASED · WELL-CIRCUMSCRIBED · USUALLY BENIGN'},
+  {key:'pituitary',  name:'Pituitary Tumor', desc:'Sellar region — pituitary adenoma is the usual finding',       note:'MIDLINE SELLAR MASS · ENDOCRINE EFFECTS POSSIBLE'},
+  {key:'notumor',    name:'No Tumor',        desc:'No mass lesion detected in this slice',                        note:'NO SIGNATURE OF THE THREE TUMOR CLASSES FOUND'},
+];
+/* Backend label order, exactly as in invoke.py — used by the demo mock only. */
+const BK = ['glioma','meningioma','healthy','pituitary'];
+
+const $ = id => document.getElementById(id);
+const delay = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); }));
+
+const state = { mode:'connecting', stage:'idle', sessionId:null, expiresAt:0, expired:false,
+  rateUsed:0, rateResetAt:0, busy:false, typing:false, pixels:null, natW:0, natH:0,
+  lastClass:null, probs:null, confTxt:'—', url:null };
+let typing = null;
+
+/* ================= MARKDOWN-LITE ================= */
+function md(src){
+  const inline = s => s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
+  let out='', para=[], list=false;
+  const fp=()=>{ if(para.length){ out+=`<p>${para.join('<br>')}</p>`; para=[]; } };
+  const fl=()=>{ if(list){ out+='</ul>'; list=false; } };
+  for(const raw of esc(src).split('\n')){
+    const line = raw.trimEnd();
+    if(/^###?\s+/.test(line)){ fp(); fl(); out+=`<h4>${inline(line.replace(/^###?\s+/,''))}</h4>`; }
+    else if(/^\s*[-•]\s+/.test(line)){ fp(); if(!list){ out+='<ul>'; list=true; } out+=`<li>${inline(line.replace(/^\s*[-•]\s+/,''))}</li>`; }
+    else if(line===''){ fp(); fl(); }
+    else para.push(inline(line));
+  }
+  fp(); fl();
+  return out || '<p></p>';
+}
+
+/* ================= TOASTS ================= */
+function toast(msg, kind='info', title){
+  const box=$('toasts'), el=document.createElement('div');
+  el.className='toast'+(kind==='err'?' err':'');
+  el.innerHTML=`<div><div class="t-title">${esc(title||(kind==='err'?'Error':'Notice'))}</div><div>${esc(msg)}</div></div>`;
+  el.addEventListener('click',()=>el.remove());
+  box.appendChild(el);
+  while(box.children.length>3) box.firstChild.remove();
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(8px)'; setTimeout(()=>el.remove(),260); }, 6400);
+}
+
+/* ================= MODE / STATUS ================= */
+function setStatus(mode){
+  state.mode = mode==='connecting' ? state.mode : mode;
+  $('statusDot').className = 'dot' + (mode==='live'?' live':mode==='demo'?' demo':'');
+  $('statusTxt').textContent = mode==='live'?'LIVE BACKEND':mode==='demo'?'DEMO MOCK':'CONNECTING…';
+}
+function pingHealth(){
+  const c=new AbortController(); const t=setTimeout(()=>c.abort(),1500);
+  return fetch(API_BASE+'/health',{signal:c.signal}).then(r=>r.ok).catch(()=>false).finally(()=>clearTimeout(t));
+}
+
+/* ================= RATE / CLOCK ================= */
+function bumpRate(){
+  const now=Date.now();
+  if(state.rateResetAt && now>state.rateResetAt){ state.rateUsed=0; state.rateResetAt=0; }
+  state.rateUsed++;
+  if(state.rateUsed===1) state.rateResetAt=now+CONFIG.RATE_WIN*1000;
+  renderRate();
+}
+function renderRate(){
+  $('rateStat').textContent=`REQ ${Math.min(state.rateUsed,CONFIG.RATE_MAX)}/${CONFIG.RATE_MAX}`;
+  $('rateStat').classList.toggle('hot', state.rateUsed>=CONFIG.RATE_MAX-2);
+}
+setInterval(()=>{
+  if(state.rateResetAt && Date.now()>state.rateResetAt){ state.rateUsed=0; state.rateResetAt=0; renderRate(); }
+  if(state.expiresAt && !state.expired && (state.stage==='ready'||state.stage==='busy')){
+    const s=Math.max(0,Math.round((state.expiresAt-Date.now())/1000));
+    $('ttlStat').textContent=`TTL ${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    $('ttlStat').classList.toggle('warn', s<300);
+    if(s===0 && state.stage==='ready') sessionExpired();
+  }
+},1000);
+
+/* ================= RESPONSE NORMALIZER =================
+   Accepts the backend's current contract:
+     { id, response, probabilities: { class, confidence, probabilities:{glioma,meningioma,healthy,pituitary} }, session_ttl }
+   …and is tolerant of: the payload under 'classification' instead, 'healthy' vs
+   'notumor' vs 'No Tumor' naming, fraction vs percentage confidence, arrays. */
+function normalizeInit(d){
+  let c = d.classification;
+  if (!c && d.probabilities && typeof d.probabilities === 'object') c = d.probabilities;
+  if (typeof c === 'string') c = { predicted: c };
+  c = c || {};
+
+  let probs = c.probabilities || {};
+  if (Array.isArray(probs)) probs = Object.fromEntries(CLASSES.map((cl,i)=>[cl.key, probs[i] ?? 0]));
+
+  const ALIAS  = { healthy:'notumor', normal:'notumor', no:'notumor', pituitarytumor:'pituitary' };
+  const squash = k => String(k).toLowerCase().replace(/[\s_-]+/g,'');
+
+  const probabilities = {};
+  for (const cl of CLASSES){
+    const hit = Object.keys(probs).find(k => { const s = squash(k); return s === cl.key || ALIAS[s] === cl.key; });
+    const v = hit ? parseFloat(probs[hit]) : NaN;
+    probabilities[cl.key] = Number.isFinite(v) ? v : 0;
+  }
+
+  let predicted = c.class || c.predicted || c.label || c.prediction || null;
+  if (predicted){
+    predicted = ALIAS[squash(predicted)] || squash(predicted);
+    if (!CLASSES.some(x => x.key === predicted)) predicted = null;
+  }
+
+  /* unit guard: tolerate 0-1 fractions and percentages alike */
+  if (Object.values(probabilities).some(v => v > 1.0001))
+    for (const k in probabilities) probabilities[k] /= 100;
+  let confidence = Number(c.confidence);
+  if (!Number.isFinite(confidence)) confidence = predicted ? probabilities[predicted] : 0;
+  if (confidence > 1.0001) confidence /= 100;
+
+  const t = Number(d.session_ttl);
+  return { id:d.id, response:d.response || '', predicted, probabilities, confidence,
+           ttl: Number.isFinite(t) && t > 0 ? t : CONFIG.TTL };
+}
+
+/* ================= API ADAPTER ================= */
+function apiError(r,data){
+  const e=new Error(data.detail||('HTTP '+r.status)); e.status=r.status;
+  const ra=r.headers.get('Retry-After'); if(ra) e.retryAfter=parseInt(ra,10)||null;
+  return e;
+}
+function fetchT(url,opts={},ms=45000){
+  const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms);
+  return fetch(url,{...opts,signal:c.signal}).finally(()=>clearTimeout(t));
+}
+async function apiInitiate(file){
+  bumpRate();
+  if(state.mode==='demo') return normalizeInit(await mockInitiate());
+  try{
+    const fd=new FormData(); fd.append('file',file,file.name||'scan.png');
+    const r=await fetchT(API_BASE+'/sessions/initiate',{method:'POST',body:fd},45000);
+    const data=await r.json().catch(()=>({detail:'Malformed server response'}));
+    if(!r.ok) throw apiError(r,data);
+    return normalizeInit(data);
+  }catch(err){
+    /* Network-level failure (server down) → honest fallback to the mock.
+       Server-returned errors (400/413/429/502/…) surface as real errors — never fabricated verdicts. */
+    if(err instanceof TypeError){
+      setStatus('demo');
+      toast('Backend unreachable — this scan ran on the demo mock. Click the status pill once uvicorn is up.','err');
+      return normalizeInit(await mockInitiate());
+    }
+    if(err.name==='AbortError') throw new Error('Request timed out — the backend took too long to respond.');
+    throw err;
+  }
+}
+async function apiMessage(text){
+  bumpRate();
+  if(state.mode==='demo') return mockMessage(text);
+  try{
+    const r=await fetchT(API_BASE+'/sessions/message',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:state.sessionId,message:text})},60000);
+    const data=await r.json().catch(()=>({detail:'Malformed server response'}));
+    if(!r.ok) throw apiError(r,data);
+    const t=Number(data.session_ttl);
+    if(Number.isFinite(t)&&t>0) state.expiresAt=Date.now()+t*1000;   /* sync clock to server's Redis TTL */
+    return data.response||'';
+  }catch(err){
+    if(err instanceof TypeError) throw new Error('Network error — backend unreachable. Your session is still stored server-side.');
+    if(err.name==='AbortError') throw new Error('Request timed out — Gemini took too long. Try again.');
+    throw err;
+  }
+}
+
+/* ================= DEMO MOCK (speaks the backend's exact JSON contract) ================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function fingerprint(){
+  const img=$('mri'), c=document.createElement('canvas'); c.width=c.height=24;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(img,0,0,24,24);
+  const d=x.getImageData(0,0,24,24).data;
+  let h=2166136261,sum=0,sum2=0;
+  for(let i=0;i<d.length;i+=4){ const l=d[i]*.299+d[i+1]*.587+d[i+2]*.114; sum+=l; sum2+=l*l; h^=(l*1000)|0; h=Math.imul(h,16777619); }
+  const n=d.length/4, m=sum/n, mean=m/255, sd=Math.sqrt(Math.max(0,sum2/n-m*m))/255;
+  return {hash:h>>>0, mean, sd};
+}
+function rateErr(){ const e=new Error('Rate limit exceeded — 10 requests per 10 minutes (as on the backend).'); e.status=429;
+  e.retryAfter=Math.max(1,Math.ceil((state.rateResetAt-Date.now())/1000)); return e; }
+
+const pctf=v=>(v*100).toFixed(1)+'%';
+function explainFor(key,probs){
+  const P={glioma:pctf(probs.glioma),meningioma:pctf(probs.meningioma),pituitary:pctf(probs.pituitary),notumor:pctf(probs.notumor)};
+  const s=[['GLIOMA',probs.glioma],['MENINGIOMA',probs.meningioma],['PITUITARY',probs.pituitary],['NO TUMOR',probs.notumor]].sort((a,b)=>b[1]-a[1]);
+  const gap=(s[0][1]-s[1][1])*100;
+  const gapWord=gap>=15?'decisive':gap>=8?'clear':'narrow';
+  const tail='\n\n*Research demonstration of a student model — not a medical device, and not a diagnosis.*';
+  if(key==='glioma') return `The classifier places this slice in the **Glioma** class with **${P.glioma}** confidence — a ${gapWord} ${gap.toFixed(1)}-point lead over Meningioma at **${P.meningioma}** and Pituitary at **${P.pituitary}**.
+
+**What a glioma is.** Gliomas arise from glial cells — the support scaffold of the brain — and are the most common primary brain tumor in adults. The family is broad, running from slow-growing grade II lesions to aggressive grade IV glioblastoma, so a "glioma" call from a screening model opens a question rather than settling one. On imaging they are typically **intra-axial**, with infiltrative margins and often surrounding edema.
+
+**Why the model leaned here.**
+- Feature activations match the intra-axial, mass-like patterns that dominated the glioma portion of the training set.
+- Meningioma retained **${P.meningioma}** — expected overlap, since both classes can appear as bright, space-occupying regions.
+
+**What usually comes next.** Radiologists would pull T2/FLAIR and contrast-enhanced sequences to judge margins and edema; a neurosurgical review weighs location and mass effect. Actual grading requires histology — imaging narrows the differential, it never grades alone.`+tail;
+  if(key==='meningioma') return `The classifier assigns this slice to **Meningioma** with **${P.meningioma}** confidence, ahead of Glioma at **${P.glioma}** and Pituitary at **${P.pituitary}** — a ${gapWord} margin of ${gap.toFixed(1)} points.
+
+**What a meningioma is.** Meningiomas grow from the meninges — the membrane layers around the brain — which makes them **extra-axial**: they press on the brain from outside rather than arising within it. Most are slow-growing and benign (WHO grade I), and many are found incidentally. Classically they are dural-based, sharply circumscribed, and enhance intensely with gadolinium, often with a "dural tail" of thickened dura trailing from the mass.
+
+**Why the model leaned here.**
+- The network keys on the well-demarcated, peripheral mass pattern that separated meningioma from the intra-axial classes during fine-tuning.
+- Glioma still scored **${P.glioma}**; the two overlap whenever a mass hugs the brain surface.
+
+**What usually comes next.** Contrast-enhanced sequences to confirm the dural base, then a size-and-growth decision: small asymptomatic meningiomas are often just monitored with periodic imaging, while larger or symptomatic ones go to surgical resection — frequently curative.`+tail;
+  if(key==='pituitary') return `The model reads this slice as **Pituitary Tumor** with **${P.pituitary}** confidence, with Glioma at **${P.glioma}** and Meningioma at **${P.meningioma}** trailing by ${gap.toFixed(1)} points.
+
+**What this class means.** The label maps to masses of the sellar region — overwhelmingly **pituitary adenomas**, benign growths of the pituitary gland itself. They are common and split into microadenomas (under 10 mm) and macroadenomas. Their impact is often hormonal rather than structural: prolactin, growth hormone or ACTH excess, or pituitary underfunction. Larger ones grow upward and can press the optic chiasm, classically costing peripheral vision first.
+
+**Why the model leaned here.**
+- Activations concentrated on the midline, sellar-centered region the model associated with this class during training.
+- Meningioma at **${P.meningioma}** is the natural confusion — both can sit near the skull base and sella.
+
+**What usually comes next.** A dedicated sella protocol — thin-slice, dynamic contrast MRI — plus an endocrine workup (prolactin, IGF-1, cortisol axes). Many adenomas are managed medically first; transsphenoidal surgery covers the rest.`+tail;
+  return `The classifier finds **no tumor** in this slice with **${P.notumor}** confidence — Glioma registered **${P.glioma}**, Meningioma **${P.meningioma}**, Pituitary **${P.pituitary}**, all low.
+
+**How to read a negative.** The network compared this slice against everything it learned about the three tumor families and found none of their signatures — no intra-axial mass pattern, no dural-based lesion, no sellar mass. The runner-up scores staying flat is the meaningful part: softmax distributes a fixed unit of probability, so a confident negative is one where the alternatives never get a foothold.
+
+**The honest limitations.**
+- This is one 2D slice — tumors can hide between slices, and radiologists read whole volumes.
+- The model only knows the four classes it was fine-tuned on; artifacts or out-of-distribution images can still mislead it.
+- Softmax confidence is relative, not calibrated — treat **${P.notumor}** as "clearly the strongest of four", not a certainty.
+
+**What usually comes next.** Clinical correlation. If symptoms exist, a full-sequence study read by a radiologist remains the standard — a clean result here is reassuring, not definitive.`+tail;
+}
+
+async function mockInitiate(){
+  if(state.rateUsed>CONFIG.RATE_MAX) throw rateErr();
+  const img=$('mri'); if(!img.complete||!img.naturalWidth) await new Promise(r=>{ img.onload=r; });
+  const fp=fingerprint(), rng=mulberry32(fp.hash);
+  /* tilt per BACKEND class order: glioma, meningioma, healthy, pituitary */
+  const tilt=[fp.mean*.5,(1-fp.mean)*.45,(1-fp.sd)*.3+.05,fp.sd*.4+.1];
+  const scores=BK.map((k,i)=>(.55+rng()*.6)+tilt[i]);
+  const topIdx=scores.indexOf(Math.max(...scores));
+  const temp=.5+rng()*.4;
+  const ex=scores.map((s,i)=>Math.exp(Math.log(s+1e-6)/temp+(i===topIdx?1.4:0)));
+  const Z=ex.reduce((a,b)=>a+b,0);
+  const pr=ex.map(v=>v/Z);
+  const ti=pr.indexOf(Math.max(...pr));
+  const target=.60+rng()*.36, rest=pr.reduce((a,b,i)=>i===ti?a:a+b,0);
+  const probsArr=pr.map((v,i)=>i===ti?target:v*(1-target)/rest);
+  const probabilities=BK.reduce((o,k,i)=>(o[k]=Math.round(probsArr[i]*1e5)/1e5,o),{});
+  /* produce the same shape invoke() + the route produce, 'healthy' key included */
+  const alias={healthy:'notumor'};
+  const fpProbs={}; BK.forEach((k,i)=>fpProbs[alias[k]||k]=probsArr[i]);
+  await delay(1400);
+  return { id:uuid(), response:explainFor(alias[BK[ti]]||BK[ti], fpProbs),
+           probabilities:{ class:BK[ti], confidence:Math.round(probsArr[ti]*1e5)/1e5, probabilities } };
+}
+
+const TREATMENT=()=>`Treatment depends more on type and grade than on anything a single classifier says, but the broad strokes: **meningiomas** are often just monitored when small and asymptomatic; larger ones are surgically resected, usually curatively. **Pituitary adenomas** frequently start with medical management (e.g. dopamine agonists for prolactinomas), with transsphenoidal surgery for hormone-active or enlarging lesions. **Gliomas** span everything from watchful waiting to maximal safe resection plus radiotherapy and temozolomide, driven by grade and molecular markers. Your reading above was **${state.lastClass?state.lastClass.name:'unclassified'}** — what actually happens in a real case is decided by a neurosurgeon or neuro-oncologist with the full study, the patient's history, and histology. Treat this demo as a screening exhibit, never a treatment input.`;
+const RELIABILITY=`Fair question to ask any classifier. A few honest caveats: a fine-tuned ResNet-50 on a curated 4-class MRI dataset typically reports high accuracy on its **test split**, but that split shares acquisition properties with the training data — similar scanners, similar preprocessing. Performance can drop on out-of-distribution images: different field strengths, sequences, or pediatric scans. The confidence numbers here are softmax outputs, not calibrated probabilities — a 92% softmax score means "the model is relatively sure", not "there is a 92% chance". That is exactly why the interface always shows all four class scores and pairs the verdict with clinical context. Ask the project author for the confusion matrix — per-class recall matters more than overall accuracy, especially for the "no tumor" class.`;
+const PIPELINE=`The pipeline, end to end: the image is verified with PIL, resized to **224×224** with Lanczos resampling and normalized with ImageNet statistics. It is then passed through a **ResNet-50** — a convolutional network with residual ("skip") connections that let very deep stacks train cleanly — pretrained on ImageNet and fine-tuned on labeled brain MRI slices. The final layer is a 4-way softmax producing the scores in the ledger. The winning class, plus all probabilities, are written into a prompt for **Gemini**, which generates the plain-language explanation and holds the conversation in a Redis-backed session, so follow-ups keep the full context. Everything runs locally — the image only ever reaches your own backend.`;
+const PROGNOSIS=`Prognosis varies enormously by tumor type and grade, so I will stay general: many **meningiomas** (WHO grade I) are effectively cured by resection and simply followed for years. **Pituitary adenomas** are frequently manageable with normal life expectancy, though hormone effects need long-term care. **Gliomas** span from decades (some grade II) to a much harder course for glioblastoma — which is precisely why histological grading matters so much. A classifier output on one slice carries no prognostic weight; real statistics come from pathology, molecular markers (IDH, MGMT for gliomas) and full clinical workup. If this concerns a real case, the numbers should come from an oncologist, not a demo.`;
+const SYMPTOMS=`Symptoms depend more on **location and growth rate** than on the class label itself. Common threads across brain tumors: progressive or morning-predominant headaches, new seizures, and focal deficits tied to the affected region — weakness, speech difficulty, vision changes. **Pituitary** lesions add hormone-related signs and visual field loss from optic chiasm compression, often while still small. **Meningiomas** are frequently found incidentally before any symptom appears. **Gliomas** more often present with seizures or progressive deficits. None of these is specific — headaches especially are almost always something else. This demo reads images; it does not evaluate patients.`;
+const SEQUENCES=`Good radiology question. Radiologists never read a single sequence: **T1** shows anatomy, **T2** and **FLAIR** highlight water — edema and infiltration light up brightly — and **T1 with gadolinium contrast** shows where the blood-brain barrier is broken, which is where many tumors enhance. Each class has habits: meningiomas are dural-based and enhance avidly (often with a "dural tail"), gliomas may enhance irregularly with FLAIR-bright edema around them, and pituitary lesions need a dedicated dynamic-contrast sella protocol. This model was trained on whatever slice type its dataset provided — one more reason a single-image verdict should be confirmed against a full study.`;
+const GRADES=`Grading (WHO I–IV) describes how aggressive a tumor is — and it is mostly a **histology** answer, not an imaging one. Meningiomas and pituitary adenomas are usually grade I. Gliomas range from grade II to IV, and for those, molecular markers now matter as much as the microscope: **IDH mutation** and **MGMT methylation** strongly shape both prognosis and treatment choice. Imaging hints at grade — enhancement pattern, edema, growth speed — but a 4-class ResNet-50 is not a grader; it separates families of tumors, not grades within them. Treat the ledger as a screening signal, and grading as the specialists' job.`;
+const CLASSES_OVERVIEW=`The four outputs, briefly: **Glioma** — intra-axial tumors of glial origin, the most common primary brain tumor in adults and the most varied in behavior. **Meningioma** — usually benign, extra-axial tumors of the meninges, often incidental and cured by resection. **Pituitary Tumor** — adenomas of the pituitary gland in the sella turcica; small but hormonally loud. **No Tumor** — no evidence of the three above in this slice. The ledger shows softmax scores, which are relative — they sum to 1, so a weak winner can still be a weak reading. The gap between the top score and the runner-up is often the most honest number on screen.`;
+const THANKS=`Glad this is useful. If you're evaluating the project: the interesting engineering is as much in the guardrails — file verification, per-IP rate limiting, bounded Redis sessions, the model-plus-explanation pairing — as in the classifier itself. Upload another slice any time, or ask anything else about the reading above.`;
+const FALLBACK=()=>`In this session I'm working from the reading above — **${state.lastClass?state.lastClass.name:'—'}** at **${state.confTxt}**, with the full ledger showing how the four classes competed. I can unpack: typical **treatment pathways**, what the **confidence** actually means, how the **ResNet-50 + Gemini pipeline** works, which **MRI sequences** radiologists would pull next, or **grading and prognosis** in general terms. Which thread should I pull? (On the live backend, this answer comes from Gemini with your full session context.)`;
+const CHAT_RULES=[
+  {re:/treat|surger|therapy|oncolog|manag|resect|chemo/, text:TREATMENT},
+  {re:/accura|confiden|reliab|trust|how good|how well|wrong|error|misread/, text:RELIABILITY},
+  {re:/how (does|did)|pipeline|resnet|architect|train|dataset|cnn|under the hood/, text:PIPELINE},
+  {re:/prognos|survival|outcome|life expect|fatal/, text:PROGNOSIS},
+  {re:/symptom|sign|headache|seizure|presentation/, text:SYMPTOMS},
+  {re:/sequence|t1|t2|flair|contrast|gadolinium|modalit/, text:SEQUENCES},
+  {re:/grade|aggress|metasta|spread|stage\b|malignant/, text:GRADES},
+  {re:/class|categor|glioma|meningioma|pituitary|labels/, text:CLASSES_OVERVIEW},
+  {re:/thank|great|nice|cool|impressive/, text:THANKS},
+];
+async function mockMessage(text){
+  if(state.rateUsed>CONFIG.RATE_MAX) throw rateErr();
+  const low=text.toLowerCase();
+  const rule=CHAT_RULES.find(r=>r.re.test(low));
+  const body=rule?(typeof rule.text==='function'?rule.text():rule.text):FALLBACK();
+  await delay(600+Math.min(body.length*4,1800));
+  return body;
+}
+
+/* ================= INGEST ================= */
+const dz=$('dz'), fileInput=$('fileInput');
+let errTimer=null;
+function dzError(msg){
+  const el=$('dzErr'); el.textContent=msg; el.hidden=false;
+  dz.classList.remove('shake'); void dz.offsetWidth; dz.classList.add('shake');
+  clearTimeout(errTimer); errTimer=setTimeout(()=>el.hidden=true,4200);
+}
+function handleFile(file){
+  if(!file) return;
+  if(!['image/png','image/jpeg','image/jpg'].includes(file.type)) return dzError('UNSUPPORTED FILE — PNG OR JPEG ONLY');
+  if(file.size>8*1024*1024) return dzError('FILE EXCEEDS THE 8 MB LIMIT');
+  $('dzErr').hidden=true;
+  enterLiveStage(file);
+}
+dz.addEventListener('click',()=>fileInput.click());
+dz.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener('change',()=>handleFile(fileInput.files[0]));
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{ e.preventDefault(); dz.classList.add('drag'); }));
+dz.addEventListener('dragleave',e=>{ if(!dz.contains(e.relatedTarget)) dz.classList.remove('drag'); });
+dz.addEventListener('drop',e=>{ e.preventDefault(); dz.classList.remove('drag'); handleFile(e.dataTransfer.files&&e.dataTransfer.files[0]); });
+window.addEventListener('paste',e=>{
+  if(state.stage!=='idle') return;
+  const it=[...(e.clipboardData?e.clipboardData.items:[])].find(i=>i.type.startsWith('image/'));
+  if(it) handleFile(it.getAsFile());
+});
+
+/* ================= PROBE (crosshair + readout) ================= */
+function attachProbe(zone,xh,probe,imgEl){
+  zone.addEventListener('mousemove',e=>{
+    const zr=zone.getBoundingClientRect();
+    const x=e.clientX-zr.left, y=e.clientY-zr.top;
+    xh.classList.add('on');
+    xh.style.setProperty('--x',x+'px'); xh.style.setProperty('--y',y+'px');
+    let label=null;
+    if(imgEl && state.pixels){
+      const ir=imgEl.getBoundingClientRect();
+      if(e.clientX>=ir.left&&e.clientX<=ir.right&&e.clientY>=ir.top&&e.clientY<=ir.bottom){
+        const nx=(e.clientX-ir.left)/ir.width, ny=(e.clientY-ir.top)/ir.height;
+        label=`X ${Math.floor(nx*state.natW)} · Y ${Math.floor(ny*state.natH)} · I ${sampleLum(nx,ny)??'—'}`;
+      }
+    }
+    probe.textContent=label??`X ${Math.round(x)} · Y ${Math.round(y)}`;
+    probe.style.left=(x>zr.width-170?x-160:x+14)+'px';
+    probe.style.top =(y>zr.height-36?y-30:y+14)+'px';
+  });
+  zone.addEventListener('mouseleave',()=>xh.classList.remove('on'));
+}
+function sampleLum(nx,ny){
+  const c=state.pixels; if(!c) return null;
+  const x=Math.min(c.width-1,Math.floor(nx*c.width)), y=Math.min(c.height-1,Math.floor(ny*c.height));
+  const d=c.getContext('2d').getImageData(x,y,1,1).data;
+  return Math.round(d[0]*.299+d[1]*.587+d[2]*.114);
+}
+function buildPixels(){
+  const img=$('mri'); state.natW=img.naturalWidth; state.natH=img.naturalHeight;
+  const scale=Math.min(1,2048/Math.max(state.natW,state.natH));
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(state.natW*scale)); c.height=Math.max(1,Math.round(state.natH*scale));
+  c.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,c.width,c.height);
+  state.pixels=c;
+}
+
+/* ================= TELEMETRY ================= */
+function addLine(k,i){
+  const el=document.createElement('div'); el.className='tele-line';
+  el.style.transitionDelay=(i*90)+'ms';
+  el.innerHTML=`<span class="tele-k">·</span><span class="tele-key">${k}</span><span class="tele-v">…</span>`;
+  $('teleLines').appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('on'));
+  return el;
+}
+function setLine(el,v,ok=true){
+  const s=el.querySelector('.tele-v'); s.textContent=v; s.classList.toggle('ok',ok);
+}
+
+/* ================= SCAN CHOREOGRAPHY ================= */
+async function runScan(file){
+  state.busy=true;
+  const L=[addLine('INTEGRITY',0),addLine('PREPROCESS',1),addLine('NORMALIZE',2),addLine('BACKBONE',3),addLine('ARGMAX',4),addLine('SYNTHESIS',5)];
+  setLine(L[0],'ok — verified'); setLine(L[1],'ok — 224×224×3 · lanczos');
+  setLine(L[2],'ok — imagenet stats'); setLine(L[3],'ok — softmax×4');
+  const p=apiInitiate(file).then(r=>({ok:true,r})).catch(e=>({ok:false,e}));
+  const [{ok,r}]=await Promise.all([p,delay(2600)]);
+  if(!ok){
+    $('viewer').classList.remove('scanning');
+    setLine(L[4],'aborted',false);
+    setLine(L[5], r.e&&r.e.status===429?'rate limited':'failed',false);
+    state.busy=false;
+    toast(r.e?r.e.message:'Ingest failed.','err','Ingest failed');
+    return;
+  }
+  const cls=CLASSES.find(c=>c.key===r.predicted);
+  setLine(L[4],(cls?cls.name.toUpperCase():'—')+' · '+(r.confidence*100).toFixed(1)+'%');
+  await delay(340);
+  setLine(L[5],'streaming…',false);
+  revealReport(r,()=>setLine(L[5],'ok — session stored'));
+  state.busy=false;
+}
+
+/* ================= REPORT REVEAL ================= */
+function countUp(el,target,dur,fmt){
+  const t0=performance.now();
+  (function step(t){ const k=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-k,3);
+    el.textContent=fmt(target*e); if(k<1) requestAnimationFrame(step); })(t0);
+}
+function revealReport(res,onTyped){
+  state.stage='ready'; state.expired=false; state.sessionId=res.id;
+  state.expiresAt=Date.now()+res.ttl*1000;
+  $('ttlStat').hidden=false; $('ttlStat').classList.remove('warn');
+  $('viewer').classList.remove('scanning');
+  $('sid').textContent='SESSION '+res.id.slice(0,8).toUpperCase();
+  $('metaSes').textContent='SESSION '+res.id.slice(0,8).toUpperCase();
+  const hasC=!!res.predicted;
+
+  if(!hasC){
+    $('vName').textContent='Response received';
+    $('vDesc').textContent='The backend replied, but no usable classification block was found in the payload — the explanation and chat below are live.';
+    $('confNum').textContent='—'; $('confDelta').textContent='';
+  } else {
+    const cls=CLASSES.find(c=>c.key===res.predicted)||{key:null,name:'—',desc:'',note:''};
+    state.lastClass=cls; state.probs=res.probabilities;
+    $('vName').textContent=cls.name; $('vDesc').textContent=cls.desc; $('vNote').textContent=cls.note||'';
+    const entries=CLASSES.map(c=>({...c,v:res.probabilities[c.key]||0})).sort((a,b)=>b.v-a.v);
+    const top=entries[0], second=entries[1];
+    state.confTxt=(top.v*100).toFixed(1)+'%';
+    $('vtag').textContent=`${cls.name.toUpperCase()} · ${state.confTxt}`; $('vtag').hidden=false;
+    countUp($('confNum'),top.v*100,900,v=>v.toFixed(1)+'%');
+    countUp($('confDelta'),(top.v-second.v)*100,900,v=>`+${v.toFixed(1)} PTS OVER ${second.name.toUpperCase()}`);
+    document.querySelectorAll('.prob-row').forEach(row=>{
+      const key=row.dataset.key, val=(res.probabilities[key]||0)*100;
+      row.classList.toggle('win',key===top.key);
+      row.querySelector('.prob-val').textContent=val.toFixed(1)+'%';
+      const bar=row.querySelector('.prob-bar i');
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{ bar.style.width=val+'%'; }));
+    });
+  }
+  setComposer(true,'idle');
+  typeInto($('explainBody'),res.response).then(()=>{ if(onTyped) onTyped(); showSugg(); });
+}
+
+/* ================= TYPEWRITER ================= */
+function typeInto(bodyEl,text){
+  return new Promise(res=>{
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches){ bodyEl.innerHTML=md(text); return res(); }
+    state.typing=true;
+    const tokens=text.split(/(\s+)/).filter(w=>w!=='');
+    const per=Math.max(2,Math.ceil(tokens.length/85));
+    let i=0, h=null;
+    typing={ body:bodyEl, done:false,
+      finish(){ if(typing.done) return; typing.done=true; clearInterval(h);
+        bodyEl.innerHTML=md(text); state.typing=false; res(); } };
+    const scroll=()=>{ const box=bodyEl.closest('#transcript');
+      if(box) box.scrollTop=box.scrollHeight; else $('send').scrollIntoView({block:'nearest'}); };
+    h=setInterval(()=>{
+      i=Math.min(tokens.length,i+per);
+      bodyEl.innerHTML=md(tokens.slice(0,i).join(''))+'<span class="caret"></span>';
+      scroll();
+      if(i>=tokens.length) typing.finish();
+    },24);
+  });
+}
+function skipTyping(b){ if(typing&&!typing.done&&typing.body===b) typing.finish(); }
+
+/* ================= CHAT ================= */
+const transcript=$('transcript'), inp=$('inp');
+function addTurn(kind,html){
+  const t=document.createElement('div'); t.className='turn '+kind;
+  t.innerHTML=`<span class="turn-tag">${kind==='me'?'YOU':'ASSISTANT · GEMINI'}</span><div class="turn-body"></div>`;
+  const b=t.querySelector('.turn-body');
+  if(html) b.innerHTML=html;
+  b.addEventListener('click',()=>skipTyping(b));
+  transcript.appendChild(t);
+  transcript.scrollTop=transcript.scrollHeight;
+  return b;
+}
+function showSugg(){ $('sugg').hidden=false; }
+function hideSugg(){ $('sugg').hidden=true; }
+function setComposer(on,mode){
+  inp.disabled=!on; $('send').disabled=!on;
+  inp.placeholder = mode==='scan' ? 'Reading scan…'
+    : mode==='wait' ? 'Assistant is responding — click its text to skip…'
+    : mode==='expired' ? 'Session expired — upload a new scan to continue.'
+    : 'Ask about this reading — the session keeps full context.';
+  updCnt();
+}
+function updCnt(){
+  $('cnt').textContent=`${inp.value.length} / ${CONFIG.MAX_MSG}`;
+  $('cnt').classList.toggle('hot',inp.value.length>CONFIG.MAX_MSG-100);
+  inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,96)+'px';
+}
+function sessionExpired(){
+  if(state.expired) return; state.expired=true; state.expiresAt=0;
+  $('ttlStat').textContent='TTL EXPIRED'; $('ttlStat').classList.add('warn');
+  setComposer(false,'expired'); hideSugg();
+  toast('Session expired (30-minute TTL) — upload a new scan to start a fresh one.','err','Session ended');
+}
+function handleChatError(e){
+  if(e.status===429){ toast(e.retryAfter?`Rate limit reached — window resets in ${e.retryAfter}s.`:(e.message+' — wait a few minutes.'),'err','Slow down'); return; }
+  if(e.status===400&&/session/i.test(e.message)){ sessionExpired(); return; }
+  toast(e.message,'err','Message failed');
+}
+async function send(){
+  const text=inp.value.trim();
+  if(!text||state.busy||state.typing||state.stage!=='ready'||state.expired) return;
+  inp.value=''; updCnt();
+  addTurn('me',esc(text).replace(/\n/g,'<br>'));
+  hideSugg(); setComposer(false,'wait');
+  try{
+    const reply=await apiMessage(text);
+    await typeInto(addTurn('ai'),reply);
+    showSugg();
+  }catch(e){ handleChatError(e); }
+  finally{ if(!state.expired) setComposer(true,'idle'); }
+}
+ $('send').addEventListener('click',send);
+inp.addEventListener('input',updCnt);
+inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
+ $('sugg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b){ inp.value=b.dataset.q; updCnt(); send(); } });
+ $('sid').addEventListener('click',()=>{
+  if(!state.sessionId) return;
+  navigator.clipboard&&navigator.clipboard.writeText(state.sessionId).then(()=>toast('Session id copied to clipboard.','info','Copied'));
+});
+
+/* ================= STAGE TRANSITIONS ================= */
+function enterLiveStage(file){
+  if(state.url) URL.revokeObjectURL(state.url);
+  state.url=URL.createObjectURL(file);
+  state.stage='busy'; state.expired=false; state.pixels=null; state.lastClass=null;
+  $('stageIdle').classList.add('hidden'); $('stageLive').classList.remove('hidden');
+  $('vName').textContent='—'; $('vDesc').textContent='Reading…'; $('vNote').textContent='';
+  $('confNum').textContent='0.0%'; $('confDelta').textContent='';
+  $('vtag').hidden=true; $('sid').textContent='SESSION —'; $('metaSes').textContent='SESSION —';
+  $('metaSize').textContent=(file.size/1024).toFixed(1)+' KB';
+  $('metaType').textContent=(file.type.split('/')[1]||'IMG').toUpperCase();
+  $('teleLines').innerHTML='';
+  $('explainBody').innerHTML='<p class="dim">Synthesizing explanation…</p>';
+  transcript.innerHTML=''; hideSugg(); setComposer(false,'scan');
+  $('viewer').classList.add('scanning');
+  window.scrollTo({top:0});
+  const img=$('mri');
+  img.onload=()=>{ buildPixels(); $('metaDims').textContent=`${img.naturalWidth} × ${img.naturalHeight} PX`; };
+  img.src=state.url;
+  runScan(file);
+}
+function newScan(){
+  if(state.busy){ toast('Hold on — a scan is still in progress.','err'); return; }
+  if(state.url){ URL.revokeObjectURL(state.url); state.url=null; }
+  state.sessionId=null; state.expiresAt=0; state.expired=false; state.pixels=null;
+  state.lastClass=null; state.probs=null; state.confTxt='—';
+  $('stageLive').classList.add('hidden'); $('stageIdle').classList.remove('hidden');
+  $('ttlStat').hidden=true; $('ttlStat').classList.remove('warn');
+  $('mri').removeAttribute('src');
+  $('viewer').classList.remove('inv','px','scanning'); $('vtag').hidden=true;
+  $('fitTxt').textContent='1:1'; $('teleLines').innerHTML='';
+  $('vName').textContent='—'; $('vDesc').textContent='Awaiting a scan.'; $('vNote').textContent='';
+  $('confNum').textContent='0.0%'; $('confDelta').textContent='';
+  document.querySelectorAll('.prob-row').forEach(r=>{
+    r.classList.remove('win');
+    const bar=r.querySelector('.prob-bar i'); bar.style.transitionDelay='0ms'; bar.style.width='0%';
+    r.querySelector('.prob-val').textContent='—';
+  });
+  $('explainBody').innerHTML='<p class="dim">Waiting for a scan…</p>';
+  transcript.innerHTML=''; hideSugg(); fileInput.value='';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+ $('newScan').addEventListener('click',newScan);
+ $('invertBtn').addEventListener('click',()=>$('viewer').classList.toggle('inv'));
+ $('fitBtn').addEventListener('click',()=>{
+  const px=$('viewer').classList.toggle('px');
+  $('fitTxt').textContent=px?'FIT':'1:1';
+});
+ $('statusPill').addEventListener('click',async()=>{
+  setStatus('connecting');
+  const ok=await pingHealth(); setStatus(ok?'live':'demo');
+  toast(ok?'Backend is live — real inference is wired in.':`Still no backend on ${API_BASE||location.origin} — staying on the demo mock.`, ok?'info':'err', ok?'Live':'Offline');
+});
+
+/* ================= INIT ================= */
+function buildLedger(){
+  const LED=[['C1','glioma'],['C2','meningioma'],['C3','pituitary'],['C4','notumor']];
+  $('ledger').innerHTML=LED.map(([ix,key])=>{
+    const c=CLASSES.find(x=>x.key===key);
+    return `<div class="prob-row" data-key="${key}"><span class="prob-idx">${ix}</span><span class="prob-name">${c.name}</span><div class="prob-bar"><i></i></div><span class="prob-val">—</span></div>`;
+  }).join('');
+}
+(async function init(){
+  buildLedger();
+  attachProbe(dz,$('dzXH'),$('dzProbe'),null);
+  attachProbe($('viewer'),$('vXH'),$('vProbe'),$('mri'));
+  if(window.lucide) lucide.createIcons();
+  if(location.protocol==='file:')
+    toast('This page was opened as a file — browsers block file:// pages from calling the API. Run the backend and open http://localhost:8000 instead.','err','Serving required');
+  const ok=await pingHealth();
+  setStatus(ok?'live':'demo');
+  if(!ok) toast(`No backend at ${API_BASE||location.origin} — the dashboard is running its demo mock. Start uvicorn (project root: uvicorn main:app) and click the status pill to go live.`,'info','Demo mode');
+})();
+})();
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
@@ -23,6 +24,7 @@ SESSION_TTL_SECONDS = 1800
 RATE_LIMIT_TTL_SECONDS = 600
 MAX_RATE_LIMIT = 10
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg"}
+CLASSES = ["Glioma", "Meningioma", "Pituitary Tumor", "No Tumor"]
 
 server = redis.Redis(host="localhost", port=6379)
 app = FastAPI()
@@ -53,7 +55,7 @@ async def initiate(request: Request, file: UploadFile = File(...)):
         server.expire(rate_limit_key, RATE_LIMIT_TTL_SECONDS)
 
     if current_rate > MAX_RATE_LIMIT:
-        raise HTTPException(status_code=429, detail="Rate Limit Exceeded")
+        raise HTTPException(status_code=429, detail="Rate Limit Exceeded", headers={"Retry-After": str(max(server.ttl(rate_limit_key), 1))})
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type; upload a PNG,JPEG or JPG image")
 
@@ -115,7 +117,7 @@ async def initiate(request: Request, file: UploadFile = File(...)):
 
     pipe.execute()
 
-    return {"id": unique_id, "response": response}
+    return {"id": unique_id, "response": response, "probabilities": classification, "session_ttl": SESSION_TTL_SECONDS}
 
 @app.post("/sessions/message")
 async def message(request: Request, payload: MessageRequest):
@@ -132,7 +134,7 @@ async def message(request: Request, payload: MessageRequest):
     if current_rate == 1:
         server.expire(rate_limit_key, RATE_LIMIT_TTL_SECONDS)
     if current_rate > MAX_RATE_LIMIT:
-        raise HTTPException(status_code=429, detail="Rate Limit Exceeded")
+        raise HTTPException(status_code=429, detail="Rate Limit Exceeded", headers={"Retry-After": str(max(server.ttl(rate_limit_key), 1))})
 
     try:
         session_key = f"Conversation:{uuid.UUID(payload.session_id)}"
@@ -175,12 +177,18 @@ async def message(request: Request, payload: MessageRequest):
 
     pipe.execute()
 
-    return {"response": response}
+    return {"response": response, "session_ttl": server.ttl(session_key)}
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc):
     print(f"Request:{request.url.path}\nUnhandled Exception: {exc}")
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "model": "resnet50", "classes": CLASSES}
+
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
     ...
