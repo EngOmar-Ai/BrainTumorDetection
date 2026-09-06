@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from PIL import Image, UnidentifiedImageError
@@ -32,7 +32,15 @@ class MessageRequest(BaseModel):
     message: str
 
 @app.post("/sessions/initiate")
-async def initiate(file: UploadFile = File(...)):
+async def initiate(request: Request, file: UploadFile = File(...)):
+
+    # ------------------------------------------------------------------ #
+    # -- Missing: Check If The Rate Limits Is Okay For The IP Address -- #
+    # ------------------------------------------------------------------ #
+
+    # -------------------------------------------------------------------- #
+    # -- Missing: Check File For Any Viruses Using An Antivirus Scanner -- #
+    # -------------------------------------------------------------------- #
 
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type; upload a PNG,JPEG or JPG image")
@@ -76,7 +84,7 @@ async def initiate(file: UploadFile = File(...)):
     }
 
     try:
-        response = gemini.invoke([user])
+        response = await gemini.invoke([user])
     except gemini.GeminiInvocationError as error:
         raise HTTPException(status_code=502, detail=str(error))
 
@@ -95,10 +103,18 @@ async def initiate(file: UploadFile = File(...)):
 
     pipe.execute()
 
+    # --------------------------------------------------------------- #
+    # -- Missing: Update The Rate Limit Status For This IP Address -- #
+    # --------------------------------------------------------------- #
+
     return {"id": unique_id, "response": response}
 
 @app.post("/sessions/message")
-async def message(payload: MessageRequest):
+async def message(request: Request, payload: MessageRequest):
+
+    # ------------------------------------------------------------------ #
+    # -- Missing: Check If The Rate Limits Is Okay For The IP Address -- #
+    # ------------------------------------------------------------------ #
 
     try:
         session_key = f"Conversation:{uuid.UUID(payload.session_id)}"
@@ -125,7 +141,7 @@ async def message(payload: MessageRequest):
     history = [json.loads(turn) for turn in history]
 
     try:
-        response = gemini.invoke(history)
+        response = await gemini.invoke(history)
     except gemini.GeminiInvocationError as error:
         raise HTTPException(status_code=502, detail=str(error))
 
@@ -142,6 +158,10 @@ async def message(payload: MessageRequest):
     pipe.expire(session_key, SESSION_TTL_SECONDS)
 
     pipe.execute()
+
+    # --------------------------------------------------------------- #
+    # -- Missing: Update The Rate Limit Status For This IP Address -- #
+    # --------------------------------------------------------------- #
 
     return {"response": response}
 
