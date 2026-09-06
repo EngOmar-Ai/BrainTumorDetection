@@ -20,6 +20,8 @@ import uuid
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_MESSAGE_LENGTH = 4000
 SESSION_TTL_SECONDS = 1800
+RATE_LIMIT_TTL_SECONDS = 600
+MAX_RATE_LIMIT = 10
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 
 server = redis.Redis(host="localhost", port=6379)
@@ -34,14 +36,24 @@ class MessageRequest(BaseModel):
 @app.post("/sessions/initiate")
 async def initiate(request: Request, file: UploadFile = File(...)):
 
-    # ------------------------------------------------------------------ #
-    # -- Missing: Check If The Rate Limits Is Okay For The IP Address -- #
-    # ------------------------------------------------------------------ #
-
     # -------------------------------------------------------------------- #
     # -- Missing: Check File For Any Viruses Using An Antivirus Scanner -- #
     # -------------------------------------------------------------------- #
 
+    client = request.client if request else None
+    host = client.host if client else None
+
+    if not client or not host:
+        raise HTTPException(status_code=400, detail="Unable to identify client ip address")
+
+    rate_limit_key = f"Rate:{host}"
+
+    current_rate = server.incr(rate_limit_key)
+    if current_rate == 1:
+        server.expire(rate_limit_key, RATE_LIMIT_TTL_SECONDS)
+
+    if current_rate > MAX_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Rate Limit Exceeded")
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type; upload a PNG,JPEG or JPG image")
 
@@ -103,18 +115,24 @@ async def initiate(request: Request, file: UploadFile = File(...)):
 
     pipe.execute()
 
-    # --------------------------------------------------------------- #
-    # -- Missing: Update The Rate Limit Status For This IP Address -- #
-    # --------------------------------------------------------------- #
-
     return {"id": unique_id, "response": response}
 
 @app.post("/sessions/message")
 async def message(request: Request, payload: MessageRequest):
 
-    # ------------------------------------------------------------------ #
-    # -- Missing: Check If The Rate Limits Is Okay For The IP Address -- #
-    # ------------------------------------------------------------------ #
+    client = request.client if request else None
+    host = client.host if client else None
+
+    if not client or not host:
+        raise HTTPException(status_code=400, detail="Unable to identify client ip address")
+
+    rate_limit_key = f"Rate:{host}"
+
+    current_rate = server.incr(rate_limit_key)
+    if current_rate == 1:
+        server.expire(rate_limit_key, RATE_LIMIT_TTL_SECONDS)
+    if current_rate > MAX_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Rate Limit Exceeded")
 
     try:
         session_key = f"Conversation:{uuid.UUID(payload.session_id)}"
@@ -123,7 +141,6 @@ async def message(request: Request, payload: MessageRequest):
 
     if not server.exists(session_key):
         raise HTTPException(status_code=400, detail="Session Not Found")
-
     if len(payload.message) > MAX_MESSAGE_LENGTH:
         raise HTTPException(status_code=413, detail="Message Exceeded Maximum Allowed Length")
 
@@ -133,7 +150,6 @@ async def message(request: Request, payload: MessageRequest):
             {"text": payload.message}
         ]
     }
-
 
     server.rpush(session_key, json.dumps(user))
 
@@ -158,10 +174,6 @@ async def message(request: Request, payload: MessageRequest):
     pipe.expire(session_key, SESSION_TTL_SECONDS)
 
     pipe.execute()
-
-    # --------------------------------------------------------------- #
-    # -- Missing: Update The Rate Limit Status For This IP Address -- #
-    # --------------------------------------------------------------- #
 
     return {"response": response}
 
