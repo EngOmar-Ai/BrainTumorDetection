@@ -372,7 +372,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:18px
    the app detects that and tells you to use the served URL instead. */
 const API_BASE = (location.protocol.startsWith('http') && ['localhost','127.0.0.1'].includes(location.hostname))
   ? '' : 'http://localhost:8000';
-const CONFIG = { RATE_MAX:10, RATE_WIN:600, TTL:1800, MAX_MSG:4000 };
+const CONFIG = { RATE_MAX:10, RATE_WIN:600, TTL:1800, MAX_MSG:4000, API_TIME_OUT:90000 };
 
 /* Frontend class keys. The backend's invoke() uses 'healthy' for the no-tumor class —
    normalizeInit() aliases it (and display names like 'No Tumor') onto 'notumor' below. */
@@ -518,7 +518,7 @@ async function apiInitiate(file){
        the backend deletes it only AFTER the new session exists, so a failed
        upload keeps the old session alive and retryable */
     if(state.retireId) fd.append('previous_session_id', state.retireId);
-    const r=await fetchT(API_BASE+'/sessions/initiate',{method:'POST',body:fd},45000);
+    const r=await fetchT(API_BASE+'/sessions/initiate',{method:'POST',body:fd},CONFIG.API_TIME_OUT);
     const data=await r.json().catch(()=>({detail:'Malformed server response'}));
     if(!r.ok) throw apiError(r,data);
     state.retireId=null;
@@ -542,7 +542,7 @@ async function apiMessage(text){
   try{
     const r=await fetchT(API_BASE+'/sessions/message',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({session_id:state.sessionId,message:text})},60000);
+      body:JSON.stringify({session_id:state.sessionId,message:text})},CONFIG.API_TIME_OUT);
     const data=await r.json().catch(()=>({detail:'Malformed server response'}));
     if(!r.ok) throw apiError(r,data);
     const t=Number(data.session_ttl);
