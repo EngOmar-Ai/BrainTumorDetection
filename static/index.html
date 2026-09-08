@@ -115,6 +115,18 @@ button.stat:hover{color:var(--ink)}
 @keyframes sweep{from{top:-70px}to{top:100%}}
 .vtag{position:absolute;top:12px;left:12px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
   background:var(--acc);color:var(--acc-ink);padding:4px 8px;text-transform:uppercase}
+
+/* ---------- viewer empty state ---------- */
+.viewer-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px;pointer-events:none;color:var(--dim)}
+.ve-ret{opacity:.55;animation:vepulse 3.2s ease-in-out infinite}
+@keyframes vepulse{50%{opacity:.95}}
+.ve-line{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--mut);text-transform:uppercase}
+.ve-sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.viewer:not(.has-img) img{display:none}                                  /* kills the alt-text artifact */
+.viewer.has-img .viewer-empty,.viewer.reading .viewer-empty{display:none}
+@media (prefers-reduced-motion: reduce){.ve-ret{animation:none}}
+
 .tools{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
 .meta{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--dim);text-align:right}
 .telemetry{margin-top:14px;border:1px solid var(--line);background:var(--bg2);padding:12px 14px;min-height:148px}
@@ -276,6 +288,15 @@ footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:18px
     </div>
     <div class="viewer" id="viewer">
       <img id="mri" alt="Uploaded MRI slice">
+      <div class="viewer-empty" id="viewerEmpty" aria-hidden="true">
+        <svg class="ve-ret" width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.2">
+          <circle cx="22" cy="22" r="13" stroke-dasharray="3 4"/>
+          <path d="M22 2v8M22 34v8M2 22h8M34 22h8"/>
+          <circle cx="22" cy="22" r="1.4" fill="currentColor" stroke="none"/>
+        </svg>
+        <span class="ve-line">No slice loaded</span>
+        <span class="ve-sub">Drop or upload an MRI scan to begin the read</span>
+      </div>
       <div class="scanfx"></div>
       <div class="xh" id="vXH"><span class="probe" id="vProbe">X 0 · Y 0</span></div>
       <span class="corners"><i></i><i></i><i></i><i></i></span>
@@ -370,7 +391,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); }));
 
-const state = { mode:'connecting', stage:'idle', sessionId:null, expiresAt:0, expired:false,
+const state = { mode:'connecting', stage:'idle', sessionId:null, retireId:null, expiresAt:0, expired:false,
   rateUsed:0, rateResetAt:0, busy:false, typing:false, pixels:null, natW:0, natH:0,
   lastClass:null, probs:null, confTxt:'—', url:null };
 let typing = null;
@@ -490,18 +511,24 @@ function fetchT(url,opts={},ms=45000){
 }
 async function apiInitiate(file){
   bumpRate();
-  if(state.mode==='demo') return normalizeInit(await mockInitiate());
+  if(state.mode==='demo'){ state.retireId=null; return normalizeInit(await mockInitiate()); }
   try{
     const fd=new FormData(); fd.append('file',file,file.name||'scan.png');
+    /* session lifecycle: retire the previous session atomically with the new scan —
+       the backend deletes it only AFTER the new session exists, so a failed
+       upload keeps the old session alive and retryable */
+    if(state.retireId) fd.append('previous_session_id', state.retireId);
     const r=await fetchT(API_BASE+'/sessions/initiate',{method:'POST',body:fd},45000);
     const data=await r.json().catch(()=>({detail:'Malformed server response'}));
     if(!r.ok) throw apiError(r,data);
+    state.retireId=null;
     return normalizeInit(data);
   }catch(err){
     /* Network-level failure (server down) → honest fallback to the mock.
        Server-returned errors (400/413/429/502/…) surface as real errors — never fabricated verdicts. */
     if(err instanceof TypeError){
       setStatus('demo');
+      state.retireId=null;
       toast('Backend unreachable — this scan ran on the demo mock. Click the status pill once uvicorn is up.','err');
       return normalizeInit(await mockInitiate());
     }
@@ -881,21 +908,27 @@ function enterLiveStage(file){
   $('explainBody').innerHTML='<p class="dim">Synthesizing explanation…</p>';
   transcript.innerHTML=''; hideSugg(); setComposer(false,'scan');
   $('viewer').classList.add('scanning');
+  $('viewer').classList.remove('has-img');
+  $('viewer').classList.add('reading');
   window.scrollTo({top:0});
   const img=$('mri');
-  img.onload=()=>{ buildPixels(); $('metaDims').textContent=`${img.naturalWidth} × ${img.naturalHeight} PX`; };
+  img.onload=()=>{ $('viewer').classList.add('has-img');
+                   buildPixels(); $('metaDims').textContent=`${img.naturalWidth} × ${img.naturalHeight} PX`; };
+  img.onerror=()=>{ $('viewer').classList.remove('has-img','reading');
+                    toast('The image could not be displayed.','err'); };
   img.src=state.url;
   runScan(file);
 }
 function newScan(){
   if(state.busy){ toast('Hold on — a scan is still in progress.','err'); return; }
+  state.retireId = state.sessionId;          /* retire this session on the next successful initiate */
   if(state.url){ URL.revokeObjectURL(state.url); state.url=null; }
   state.sessionId=null; state.expiresAt=0; state.expired=false; state.pixels=null;
   state.lastClass=null; state.probs=null; state.confTxt='—';
   $('stageLive').classList.add('hidden'); $('stageIdle').classList.remove('hidden');
   $('ttlStat').hidden=true; $('ttlStat').classList.remove('warn');
   $('mri').removeAttribute('src');
-  $('viewer').classList.remove('inv','px','scanning'); $('vtag').hidden=true;
+  $('viewer').classList.remove('inv','px','scanning','has-img','reading'); $('vtag').hidden=true;
   $('fitTxt').textContent='1:1'; $('teleLines').innerHTML='';
   $('vName').textContent='—'; $('vDesc').textContent='Awaiting a scan.'; $('vNote').textContent='';
   $('confNum').textContent='0.0%'; $('confDelta').textContent='';
