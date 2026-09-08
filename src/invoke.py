@@ -1,7 +1,7 @@
 from torch import Tensor
 import torch
 
-from train import model
+from train import model, device
 
 def invoke(tensor: Tensor):
     """
@@ -45,6 +45,7 @@ def invoke(tensor: Tensor):
     if tensor.shape[1] != 3 or tensor.shape[2] != 224 or tensor.shape[3] != 224:
         raise ValueError('Image Tensor Should Be In The Shape Batch, 3, 224, 224')
 
+    tensor.to(device)
     model.eval()
 
     with torch.inference_mode():
