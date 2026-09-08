@@ -24,6 +24,7 @@ def train() -> None:
         None
     """
 
+    print(f"============================================================")
     print(f"Initializing Training Session... ")
 
     load()
@@ -227,6 +228,8 @@ def load() -> None:
     Returns:
         None
     """
+
+    print(f"============================================================")
 
     if path.exists():
         print(f"Found checkpoint at {path}, Loading model...")

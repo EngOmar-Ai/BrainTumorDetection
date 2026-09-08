@@ -18,13 +18,18 @@ import redis
 import json
 import uuid
 
+# ----------------------- Configuration ----------------------- #
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_MESSAGE_LENGTH = 4000
+
+RATE_LIMIT = 10
+
 SESSION_TTL_SECONDS = 1800
 RATE_LIMIT_TTL_SECONDS = 600
-MAX_RATE_LIMIT = 10
+
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 CLASSES = ["Glioma", "Meningioma", "Pituitary Tumor", "No Tumor"]
+# ------------------------------------------------------------- #
 
 server = redis.Redis(host="localhost", port=6379)
 app = FastAPI()
@@ -32,11 +37,40 @@ app = FastAPI()
 load()
 
 class MessageRequest(BaseModel):
+    """
+    Pydantic model representing an incoming chat message payload.
+
+    Attributes:
+        session_id (str): The unique identifier for the chat session.
+        message (str): The message text sent by the user.
+    """
+
     session_id: str
     message: str
 
 @app.post("/sessions/initiate")
 async def initiate(request: Request, file: UploadFile = File(...)):
+    """
+    Initiates a new chat session by processing an uploaded MRI image.
+
+    Performs rate limiting, validates the file format and size, runs classification,
+    generates an initial context-aware response using Gemini, and stores the session history in Redis.
+
+    Args:
+        request (Request): The incoming FastAPI request object used to determine client IP.
+        file (UploadFile): The uploaded MRI image file (PNG, JPEG, or JPG).
+
+    Returns:
+        dict: A dictionary containing the unique session identifier (`id`), initial model `response`,
+            classification `probabilities`, and `session_ttl`.
+
+    Raises:
+        HTTPException:
+            - 400 if client IP cannot be identified, file type is unsupported, or image verification fails.
+            - 413 if the uploaded file exceeds the maximum allowed size.
+            - 429 if the rate limit is exceeded.
+            - 502 if an error occurs during Gemini API invocation.
+    """
 
     # -------------------------------------------------------------------- #
     # -- Missing: Check File For Any Viruses Using An Antivirus Scanner -- #
@@ -54,7 +88,7 @@ async def initiate(request: Request, file: UploadFile = File(...)):
     if current_rate == 1:
         server.expire(rate_limit_key, RATE_LIMIT_TTL_SECONDS)
 
-    if current_rate > MAX_RATE_LIMIT:
+    if current_rate > RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Rate Limit Exceeded", headers={"Retry-After": str(max(server.ttl(rate_limit_key), 1))})
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type; upload a PNG,JPEG or JPG image")
@@ -121,6 +155,26 @@ async def initiate(request: Request, file: UploadFile = File(...)):
 
 @app.post("/sessions/message")
 async def message(request: Request, payload: MessageRequest):
+    """
+    Appends a user message to an active chat session and gets a response from Gemini.
+
+    Performs rate limiting, validates session existence and message length, updates chat history,
+    and queries the Gemini model.
+
+    Args:
+        request (Request): The incoming FastAPI request object used for rate limiting.
+        payload (MessageRequest): The request body containing the session ID and user message.
+
+    Returns:
+        dict: A dictionary containing the model's text `response` and the updated `session_ttl`.
+
+    Raises:
+        HTTPException:
+            - 400 if client IP is missing, session ID is invalid, or session is not found.
+            - 413 if the message exceeds the maximum allowed length.
+            - 429 if the rate limit is exceeded.
+            - 502 if an error occurs during Gemini API invocation.
+    """
 
     client = request.client if request else None
     host = client.host if client else None
@@ -133,7 +187,7 @@ async def message(request: Request, payload: MessageRequest):
     current_rate = server.incr(rate_limit_key)
     if current_rate == 1:
         server.expire(rate_limit_key, RATE_LIMIT_TTL_SECONDS)
-    if current_rate > MAX_RATE_LIMIT:
+    if current_rate > RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Rate Limit Exceeded", headers={"Retry-After": str(max(server.ttl(rate_limit_key), 1))})
 
     try:
@@ -181,11 +235,30 @@ async def message(request: Request, payload: MessageRequest):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc):
+    """
+    Global exception handler for unhandled server errors.
+
+    Logs the request path and exception details, then returns a standardized 500 internal server error JSON response.
+
+    Args:
+        request: The incoming FastAPI request where the exception occurred.
+        exc (Exception): The unhandled exception instance.
+
+    Returns:
+        JSONResponse: A 500 status response with an internal server error detail.
+    """
+
     print(f"Request:{request.url.path}\nUnhandled Exception: {exc}")
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 @app.get("/health")
 async def health():
+    """
+    Performs a health check on the application.
+
+    Returns:
+        dict: A status dictionary indicating the server is operational, the active model name, and supported classes.
+    """
     return {"status": "ok", "model": "resnet50", "classes": CLASSES}
 
 app.mount("/", StaticFiles(directory=r"../static", html=True), name="static")
