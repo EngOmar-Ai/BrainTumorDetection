@@ -188,7 +188,7 @@ async def unhandled_exception_handler(request, exc):
 async def health():
     return {"status": "ok", "model": "resnet50", "classes": CLASSES}
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=r"../static", html=True), name="static")
 
 if __name__ == "__main__":
     ...
