@@ -1,5 +1,6 @@
 from google.genai.errors import APIError, ServerError
 from google import genai
+import asyncio
 
 from dotenv import load_dotenv
 import os
@@ -35,29 +36,34 @@ async def invoke(prompt: str | list) -> str:
         GeminiInvocationError: If the model returns an empty string, or if
             server-side, client-side, or unexpected errors occur during execution.
     """
+    for attempt in range(5):
+        try:
+            response = await client.aio.models.generate_content(
+                model="gemini-2.5-flash",  # Ensure this matches your target model
+                contents=prompt,
+            )
 
-    try:
+            result_text = response.text
 
-        response = await client.aio.models.generate_content(
-            model = "gemini-3.6-flash",
-            contents= prompt,
-        )
+            if not result_text:
+                raise GeminiInvocationError("The Model Returned An Empty String")
 
-        response = response.text
+            return result_text
 
-        if not response:
-            raise GeminiInvocationError("The Model Returned An Empty String")
+        except APIError as error:
+            # Check if it's the last attempt; if so, let it fail/raise out
+            if attempt == 4:
+                raise GeminiInvocationError("Encountered an API error after 5 attempts") from error
 
-        return response
+            # Use async sleep so you don't block the event loop
+            await asyncio.sleep(60)
 
-    except ServerError as error:
-        raise GeminiInvocationError("Encountered A An Exception From The Gemini Servers Side") from error
+        except ServerError as error:
+            raise GeminiInvocationError("Encountered a server-side exception from Gemini") from error
 
-    except APIError as error:
-        raise GeminiInvocationError("Encountered A An Exception From The Client Side") from error
-
-    except Exception as exception:
-        raise GeminiInvocationError("Encountered A An Unexpected Exception") from exception
+        except Exception as exception:
+            # Catch-all for unexpected errors you don't want to silently retry
+            raise GeminiInvocationError("Encountered an unexpected exception") from exception
 
 if __name__ == "__main__":
     ...
