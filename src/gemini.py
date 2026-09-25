@@ -40,7 +40,7 @@ async def invoke(prompt: str | list) -> str:
     for attempt in range(5):
         try:
             response = await client.aio.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.6-flash",
                 contents=prompt,
             )
 
@@ -55,7 +55,7 @@ async def invoke(prompt: str | list) -> str:
             if attempt == 4:
                 raise GeminiInvocationError("Encountered an API error after 5 attempts") from error
             else:
-                await asyncio.sleep(60)
+                await asyncio.sleep(15)
 
         except Exception as exception:
             raise GeminiInvocationError("Encountered an unexpected exception") from exception
