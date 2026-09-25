@@ -1,9 +1,9 @@
-from google.genai.errors import APIError, ServerError
+from google.genai.errors import APIError
 from google import genai
-import asyncio
 
 from dotenv import load_dotenv
 import os
+import asyncio
 
 load_dotenv()
 
@@ -36,10 +36,11 @@ async def invoke(prompt: str | list) -> str:
         GeminiInvocationError: If the model returns an empty string, or if
             server-side, client-side, or unexpected errors occur during execution.
     """
+
     for attempt in range(5):
         try:
             response = await client.aio.models.generate_content(
-                model="gemini-2.5-flash",  # Ensure this matches your target model
+                model="gemini-2.5-flash",
                 contents=prompt,
             )
 
@@ -51,19 +52,15 @@ async def invoke(prompt: str | list) -> str:
             return result_text
 
         except APIError as error:
-            # Check if it's the last attempt; if so, let it fail/raise out
             if attempt == 4:
                 raise GeminiInvocationError("Encountered an API error after 5 attempts") from error
-
-            # Use async sleep so you don't block the event loop
-            await asyncio.sleep(60)
-
-        except ServerError as error:
-            raise GeminiInvocationError("Encountered a server-side exception from Gemini") from error
+            else:
+                await asyncio.sleep(60)
 
         except Exception as exception:
-            # Catch-all for unexpected errors you don't want to silently retry
             raise GeminiInvocationError("Encountered an unexpected exception") from exception
+
+    raise GeminiInvocationError("The Model Returned An Empty String") from None
 
 if __name__ == "__main__":
     ...
