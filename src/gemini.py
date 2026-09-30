@@ -47,20 +47,23 @@ async def invoke(prompt: str | list) -> str:
             result_text = response.text
 
             if not result_text:
-                raise GeminiInvocationError("The Model Returned An Empty String")
+                raise GeminiInvocationError("The Model has returned an empty string")
 
             return result_text
 
         except APIError as error:
-            if attempt == 4:
-                raise GeminiInvocationError("Encountered an API error after 5 attempts") from error
+            if attempt >= 4:
+                raise GeminiInvocationError(f"Encountered an API error after 5 attempts.\nError:\n{error}") from error
             else:
-                await asyncio.sleep(15)
+                await asyncio.sleep(15 * (attempt + 1))
+
+        except GeminiInvocationError:
+            raise
 
         except Exception as exception:
-            raise GeminiInvocationError("Encountered an unexpected exception") from exception
+            raise GeminiInvocationError(f"Encountered an unexpected exception.\nException:\n{exception}") from exception
 
-    raise GeminiInvocationError("The Model Returned An Empty String") from None
+    raise GeminiInvocationError("All attempts failed to return a valid value.")
 
 if __name__ == "__main__":
     ...
