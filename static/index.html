@@ -372,7 +372,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:18px
    the app detects that and tells you to use the served URL instead. */
 const API_BASE = (location.protocol.startsWith('http') && ['localhost','127.0.0.1'].includes(location.hostname))
   ? '' : 'http://localhost:8000';
-const CONFIG = { RATE_MAX:10, RATE_WIN:600, TTL:1800, MAX_MSG:4000, API_TIME_OUT:90000 };
+const CONFIG = { RATE_MAX:10, RATE_WIN:600, TTL:1800, MAX_MSG:4000, API_TIME_OUT:180000 };
 
 /* Frontend class keys. The backend's invoke() uses 'healthy' for the no-tumor class —
    normalizeInit() aliases it (and display names like 'No Tumor') onto 'notumor' below. */
