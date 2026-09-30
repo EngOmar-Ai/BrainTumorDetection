@@ -407,5 +407,20 @@ Probabilities: {data['probabilities']}
 
 """
 
+def verification_prompt() -> str:
+    return """
+    You are a medical data validation assistant. Analyze this image and evaluate 
+    whether it meets the criteria for a brain tumor detection model.
+    
+    1. The image is indeed an image of a brain MRI scan, not a scan of any thing else or even a random image that is not even a MRI scan.
+    2. The image is clear and visible, the image is not blurred or the colors are corrupted or anything else that would affect the prediction of the model.
+    
+    if the image meets these 2 criteria, then return 'valid' else if it doesn't meet
+    even one of them then return 'invalid'
+    
+    Note: Only respond with exactly ONE word, either 'valid' or 'invalid' depending on 
+    your reasoning
+    """
+
 if __name__ == "__main__":
     ...
