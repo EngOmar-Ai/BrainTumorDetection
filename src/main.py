@@ -9,7 +9,7 @@ from io import BytesIO
 from torchvision.transforms import InterpolationMode
 from torchvision import transforms
 
-from prompt import initiation_prompt
+from prompt import initiation_prompt, verification_prompt
 from train import load
 from invoke import invoke
 import gemini
@@ -131,6 +131,14 @@ async def initiate(request: Request, file: UploadFile = File(...)):
         response = await gemini.invoke(prompt=[user], files=[original])
     except gemini.GeminiInvocationError as error:
         raise HTTPException(status_code=502, detail=str(error))
+
+    try:
+        verification = await gemini.invoke(prompt=verification_prompt(response))
+    except gemini.GeminiInvocationError as error:
+        raise HTTPException(status_code=502, detail=str(error))
+
+    if verification == "invalid":
+        classification = {'class': 'Unknown', 'confidence': 0.0, 'probabilities': {'glioma': 0.0, 'meningioma': 0.0, 'healthy': 0.0, 'pituitary': 0.0}}
 
     assistant = {
         "role": "model",

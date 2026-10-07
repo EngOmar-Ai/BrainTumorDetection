@@ -484,5 +484,24 @@ Probabilities: {data['probabilities']}
 
 """
 
+def verification_prompt(response):
+    return f"""
+    You are a simple classifier for a brain tumor detection project, analyze the model response to the user uploaded image
+    and respond accordingly.
+    
+    The Question: Does this response from the ai assistant indicate that the provided image was invalid or valid?
+    
+    a 'valid' image response will look like the model explaining the deep learning model brain scan classification,
+    while an 'invalid' image response will be the model politely refusing to answer
+    
+    answer with ONLY ONE word either:
+    
+    - 'valid': if the response indicates that the image provided by the user was valid
+    - 'invalid': if the response indicates that the image provided by the user was invalid
+    
+    Here is the model response:
+    {response}
+"""
+
 if __name__ == "__main__":
     ...
