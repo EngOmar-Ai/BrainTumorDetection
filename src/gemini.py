@@ -40,19 +40,19 @@ async def invoke(prompt: str | list, files: None | list | tuple = None) -> str:
 
     for attempt in range(5):
         try:
-            contents = prompt if not files else [[prompt] + files]
+            contents = prompt if not files else prompt + files
 
             response = await client.aio.models.generate_content(
                 model="gemini-3.6-flash",
                 contents=contents,
             )
 
-            result_text = response.text
+            text = response.text
 
-            if not result_text:
+            if not text:
                 raise GeminiInvocationError("The Model has returned an empty string")
 
-            return result_text
+            return text
 
         except APIError as error:
             if attempt >= 4:

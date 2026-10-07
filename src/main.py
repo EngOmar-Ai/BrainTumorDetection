@@ -9,7 +9,7 @@ from io import BytesIO
 from torchvision.transforms import InterpolationMode
 from torchvision import transforms
 
-from prompt import initiation_prompt, verification_prompt
+from prompt import initiation_prompt
 from train import load
 from invoke import invoke
 import gemini
@@ -104,16 +104,7 @@ async def initiate(request: Request, file: UploadFile = File(...)):
     except UnidentifiedImageError:
         raise HTTPException(status_code=400, detail="File failed to verify as an image")
 
-    image = Image.open(BytesIO(bytes_data)).convert("RGB")
-
-    try:
-        response = await gemini.invoke([verification_prompt(), image])
-
-        if response.strip().lower() != "valid":
-            raise HTTPException(status_code=400, detail="Image failed to verify as a clear brain MRI scan")
-
-    except gemini.GeminiInvocationError as error:
-        raise HTTPException(status_code=502, detail=str(error))
+    original = Image.open(BytesIO(bytes_data)).convert("RGB")
 
     transform = transforms.Compose([
         transforms.Resize((224, 224), interpolation=InterpolationMode.LANCZOS),
@@ -121,7 +112,7 @@ async def initiate(request: Request, file: UploadFile = File(...)):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    image = transform(image).unsqueeze(0)
+    image = transform(original).unsqueeze(0)
 
     classification = invoke(image)
 
@@ -137,7 +128,7 @@ async def initiate(request: Request, file: UploadFile = File(...)):
     }
 
     try:
-        response = await gemini.invoke([user])
+        response = await gemini.invoke(prompt=[user], files=[original])
     except gemini.GeminiInvocationError as error:
         raise HTTPException(status_code=502, detail=str(error))
 
